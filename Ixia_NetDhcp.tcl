@@ -385,12 +385,18 @@ Deputs "Args:$args "
                     error "$errNumber(1) key:$key value:$value"
                 }
             }		   
-		  -use_broadcast_flag {
-			  set use_broadcast_flag $value
-		  }		   
-		  -relay_server_ipv4_addr_step {
-			  set relay_server_ipv4_addr_step $value
-		  }
+		    -use_broadcast_flag {
+			    set use_broadcast_flag $value
+		    }		   
+		    -relay_server_ipv4_addr_step {
+			    set relay_server_ipv4_addr_step $value
+		    }
+            -request_and_discovery_option_type {
+			    set request_and_discovery_option_type $value
+		    }
+            -request_and_discovery_option_value {
+			    set request_and_discovery_option_value $value
+		    }
         }
     }
 	set range $handle
@@ -425,6 +431,31 @@ Deputs "Args:$args "
     }
     if { [ info exists remote_id ] } {
         ixNet setA $range/dhcpRange -relayRemoteId $remote_id
+    }
+    if { [ info exists request_and_discovery_option_type ] &&[ info exists request_and_discovery_option_value ] } {
+        set clientOption [lindex [ixNet getA $range/dhcpRange -clientOptionSet] 0]
+        set dhcpTlv [ixNet add $clientOption dhcpOptionTlv ]
+        if {[regexp -nocase {^0x} $request_and_discovery_option_type]} {
+		    scan $request_and_discovery_option_type %x code
+	    } else {
+		   scan "0x$request_and_discovery_option_type" %x code
+        
+	    }
+        
+         if {[regexp -nocase {^0x} $request_and_discovery_option_value]} {
+		    set request_and_discovery_option_value [ string range $request_and_discovery_option_value 2 end ]
+	    }
+       
+        ixNet setMultiAttrs $dhcpTlv -type hexadecimal \
+             -code $code  \
+             -value $request_and_discovery_option_value
+        ixNet commit
+        set dhcpTlv [lindex [ixNet remapIds $dhcpTlv] 0]
+        ixNet setA $clientOption -defaultp true
+        ixNet commit
+             
+             
+        
     }
     if { [ info exists retry_attempts ] } {
         set root [ixNet getRoot]

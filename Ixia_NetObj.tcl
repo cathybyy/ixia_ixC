@@ -354,6 +354,7 @@ Deputs "$qtpid $qvlanid $qprior"
     
     if { [ info exists outer_vlan_id ] } {
         ixNet setA $outer_vlan -firstId $outer_vlan_id
+        ixNet setA $outer_vlan -increment 0
     }
     
     if { [ info exists outer_vlan_step ] } {
@@ -402,8 +403,10 @@ Deputs "inner vlan enabled..."
     if { [ info exists inner_vlan_id ] } {
 	    if {$verval == 1} {
 		    ixNet setA $inner_vlan -innerFirstId $inner_vlan_id
+            ixNet setA $inner_vlan -innerIncrement 0
 	    } else {
 		    ixNet setA $inner_vlan -firstId $inner_vlan_id
+            ixNet setA $inner_vlan -increment 0
 	    }
     }
     

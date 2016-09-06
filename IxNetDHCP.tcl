@@ -210,6 +210,8 @@ Deputs "----- TAG: $tag -----"
             set argslist(-enablerelayagent)               -enable_relay_agent
             set argslist(-relayagentserverip)             -relay_server_ipv4_addr
             set argslist(-relayagentserveripstep)         -relay_server_ipv4_addr_step
+            set argslist(-requestanddiscoveryoptiontype)       -request_and_discovery_option_type
+            set argslist(-requestanddiscoveryoptionvalue)       -request_and_discovery_option_value
             #set argslist(requestedprefixlength)
             #set argslist(requestedstartingaddr)
             #set argslist(dhcpv6cpsipv6addr)
