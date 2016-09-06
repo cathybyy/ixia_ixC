@@ -411,7 +411,7 @@ Deputs "inner vlan enabled..."
 	    } else {
 		    ixNet setA $inner_vlan -firstId $inner_vlan_id
             ixNet setA $inner_vlan -increment 0
-
+        }
     }
     
     if { [ info exists inner_vlan_step ] } {
