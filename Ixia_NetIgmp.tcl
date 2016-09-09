@@ -291,7 +291,7 @@ Deputs "Args:$args "
 		if { [ info exists unsolicited_report_interval ] } {
 			ixNet setA $h -reportFreq $unsolicited_report_interval
 		} else {
-		    ixNet setA $h -reportFreq 10
+		    ixNet setA $h -reportFreq 30
 			ixNet commit
 		}
 		if { [ info exists active ] } {
