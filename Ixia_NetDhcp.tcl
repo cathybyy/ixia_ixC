@@ -462,6 +462,14 @@ Deputs "Args:$args "
             "0X52" {
                 ixNet setA $range/dhcpRange -useTrustedNetworkElement true
                 ixNet commit
+                if {[regexp -nocase {0103} $request_and_discovery_option_value]} {
+                    set code [string trim $request_and_discovery_option_value "0103" ] 
+                    ixNet setA $range/dhcpRange -relayUseCircuitId true
+                    ixNet commit
+                    ixNet setA $range/dhcpRange -relayCircuitId $code
+                    ixNet commit
+                    
+                }
                 
             }
             default {
