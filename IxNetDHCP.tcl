@@ -148,7 +148,7 @@ Deputs "----- TAG: $tag -----"
             set argslist(-duidenterpricenum)              -duid_enterprise
             set argslist(-duidstartvalue)                 -duid_start
             set argslist(-duidstepvalue)                  -duid_step  
-            #set argslist(duidcustomvalue)
+            set argslist(-optionpayload)                  -option_payload
             #set argslist(enablelightweightdra)
             set argslist(-enablerelayagent)               -enable_relay_agent
             set argslist(-relayagentserverip)             -relay_server_ipv4_addr

@@ -433,28 +433,60 @@ Deputs "Args:$args "
         ixNet setA $range/dhcpRange -relayRemoteId $remote_id
     }
     if { [ info exists request_and_discovery_option_type ] &&[ info exists request_and_discovery_option_value ] } {
-        set clientOption [lindex [ixNet getA $range/dhcpRange -clientOptionSet] 0]
-        set dhcpTlv [ixNet add $clientOption dhcpOptionTlv ]
-        if {[regexp -nocase {^0x} $request_and_discovery_option_type]} {
-		    scan $request_and_discovery_option_type %x code
-	    } else {
-		   scan "0x$request_and_discovery_option_type" %x code
-        
-	    }
-        
-         if {[regexp -nocase {^0x} $request_and_discovery_option_value]} {
-		    set request_and_discovery_option_value [ string range $request_and_discovery_option_value 2 end ]
-	    }
-       
-        ixNet setMultiAttrs $dhcpTlv -type hexadecimal \
-             -code $code  \
-             -value $request_and_discovery_option_value
-        ixNet commit
-        set dhcpTlv [lindex [ixNet remapIds $dhcpTlv] 0]
-        ixNet setA $clientOption -defaultp true
-        ixNet commit
-             
-             
+         
+        switch -exact -- $request_and_discovery_option_type {
+            "0x37" -
+            "0X37" {
+                if {[regexp -nocase {^0x} $request_and_discovery_option_value]} {
+                    scan $request_and_discovery_option_value %x code
+                } else {
+                    scan "0x$request_and_discovery_option_value" %x code
+                
+                }
+                set dhcprequestlist [ixNet getA $range/dhcpRange -dhcp4ParamRequestList]
+                set dhcprequestlist "$dhcprequestlist; $code"
+                ixNet setA $range/dhcpRange -dhcp4ParamRequestList $dhcprequestlist
+                ixNet commit
+                
+            }
+            "0x3c" -
+            "0X3C" -
+            "0x3C" {
+                ixNet setA $range/dhcpRange -useVendorClassId true
+                ixNet commit
+                ixNet setA $range/dhcpRange -vendorClassId $request_and_discovery_option_value
+                ixNet commit
+                
+            }
+            "0x52" -
+            "0X52" {
+                ixNet setA $range/dhcpRange -useTrustedNetworkElement true
+                ixNet commit
+                
+            }
+            default {
+                set clientOption [lindex [ixNet getA $range/dhcpRange -clientOptionSet] 0]
+                set dhcpTlv [ixNet add $clientOption dhcpOptionTlv ]
+                if {[regexp -nocase {^0x} $request_and_discovery_option_type]} {
+                    scan $request_and_discovery_option_type %x code
+                } else {
+                   scan "0x$request_and_discovery_option_type" %x code
+                
+                }
+                
+                 if {[regexp -nocase {^0x} $request_and_discovery_option_value]} {
+                    set request_and_discovery_option_value [ string range $request_and_discovery_option_value 2 end ]
+                }
+               
+                ixNet setMultiAttrs $dhcpTlv -type hexadecimal \
+                     -code $code  \
+                     -value $request_and_discovery_option_value
+                ixNet commit
+                set dhcpTlv [lindex [ixNet remapIds $dhcpTlv] 0]
+                ixNet setA $clientOption -defaultp true
+                ixNet commit
+            }
+        }            
         
     }
     if { [ info exists retry_attempts ] } {
@@ -1811,6 +1843,9 @@ Deputs "Args:$args "
                     error "$errNumber(1) key:$key value:$value"
                 }                
 			}
+            -option_payload {
+                set option_payload $value
+            }
 		}
     }
 
@@ -1847,6 +1882,18 @@ Deputs "Args:$args "
 	
 	if { [ info exists session_type ] } {
         ixNet setA $range/dhcpRange -dhcp6IaType [string toupper $session_type]
+	}
+    if { [ info exists option_payload ] } {
+        if {[regexp -nocase {^0x} $option_payload]} {
+            scan $option_payload %x code
+        } else {
+            scan "0x$option_payload" %x code
+        
+        }
+        set dhcprequestlist [ixNet getA $range/dhcpRange -dhcp6ParamRequestList]
+        set dhcprequestlist "$dhcprequestlist; $code"
+        ixNet setA $range/dhcpRange -dhcp6ParamRequestList $dhcprequestlist
+        ixNet commit
 	}
 
     ixNet  commit
