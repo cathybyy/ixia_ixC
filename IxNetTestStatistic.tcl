@@ -1079,6 +1079,7 @@ Deputs "rxframes var:$value"
 
 
         set statistics [ ixNet getA $flowView/page -columnCaptions ]
+		#Deputs "flowflag: $flowflag"
         if { $flowflag } {
             set flowInfoIndex [ lsearch -exact $statistics {Flow Group} ]
         } else {
@@ -1105,6 +1106,7 @@ Deputs "rxframes var:$value"
 				set statName [ eval lindex $result $flowInfoIndex ]
 				set txportName [eval lindex $result $TxportInfoIndex ]
 				#Deputs "traffic result: $result"
+				#Deputs "statName: $statName ; name: $name; txportName: $txportName; statPortName: $statPortName"
 				if {  $statName == $name && $txportName == $statPortName  } {
 					set flowFound 1
 					set ssflag 1
@@ -1112,11 +1114,11 @@ Deputs "rxframes var:$value"
 				}
 				incr resultIndex
 			}
-			#Deputs "txport flowFound: $flowFound"
+			Deputs "txport flowFound: $flowFound"
 			if { $flowFound } {
 				eval set result [lindex $resultList $resultIndex]
 			
-        Deputs "txport flowFound: $flowFound"
+       # Deputs "txport flowFound: $flowFound"
 		Deputs "Accumulated value:$result"
 				if { [ info exists TxFrames ] } {
 				
@@ -1236,22 +1238,36 @@ Deputs "rxframes var:$value"
 			set flowFound   0
 	# Port Information
 			#Rx port check
+			if {$flowflag == 0 } {
+				set flowNameIndex [ lsearch -exact $statistics {Flow Group} ]
+			}
 			foreach result $resultList {
 				set statName [ eval lindex $result $flowInfoIndex ]
-				set rxportName [eval lindex $result $RxportInfoIndex ]
 				
+				set rxportName [eval lindex $result $RxportInfoIndex ]
+				#Deputs "statName: $statName ; name: $name; rxportName: $rxportName; statPortName: $statPortName"
 				if {  $statName == $name && $rxportName == $statPortName  } {
 					set flowFound 1
 					set ssflag 1
 					break
 				}
+				if {$flowflag == 0 } {
+				    set statName [ eval lindex $result $flowNameIndex ]
+					#Deputs "statName: $statName ; name: $name; rxportName: $rxportName; statPortName: $statPortName"
+					if {  $statName == $name && $rxportName == $statPortName  } {
+						set flowFound 1
+						set ssflag 1
+						break
+					}
+				}
+				
 				incr resultIndex
 			}
 			#Deputs "rxport flowFound: $flowFound"
 			if { $flowFound } {
 				eval set result [lindex $resultList $resultIndex]
 			
-    Deputs "rxport flowFound: $flowFound"
+    #Deputs "rxport flowFound: $flowFound"
 	Deputs "Accumulated value:$result"
 			
 				if { [ info exists RxFrames ] } {

@@ -1777,9 +1777,14 @@ Deputs "error occured..."
         if { [
         catch {
             #ixNet setA $hStream -suspend True
-			ixNet remove $hTrafficItem
+			
+			if { $flowflag == 1 } {
+			     delete object ${this}_flow
+			} else {
+			    ixNet remove $hTrafficItem
             ixNet commit
-			delete object ${this}_item
+			    delete object ${this}_item
+			}
         }
         ] } {
 Deputs $errorInfo

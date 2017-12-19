@@ -544,7 +544,7 @@ Deputs "Traffic exist: $Traffic"
 			uplevel 1 " eval $command " 
 			set command "$trafficName SetPortObj $this "
 			uplevel 1 " eval $command "
-            
+            Deputs "flowflag:$flowflag"
             if { $flowflag == 1} {
                 uplevel 1 " eval $trafficName SetFlowFlag 1 "
             }
@@ -996,10 +996,10 @@ Deputs "----- TAG: $tag -----"
 		
 		
 		set flowList "" 
-        set generateList ""        
+        #set generateList ""        
 # Check streams, which should stop the traffic engine.
         if { [ info exists streamList ] } {
-
+#Deputs "streamList: $streamList"
             foreach stream $streamList {                                
                 if { [ catch {
                     set stream [ IxiaCapi::Regexer::GetObject $stream ]
@@ -1008,14 +1008,16 @@ Deputs "----- TAG: $tag -----"
                     if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
                         set flowObj [ uplevel 1 " $stream cget -hFlow " ]
                         lappend flowList $flowObj
-                        Deputs "flowList: $flowList"
-                        if { [lsearch -exact $generateList $trafficObj ] < 0 } {
-                            lappend generateList $trafficObj
-                        }
-                        Deputs "generateList: $generateList"
+                        #Deputs "flowList: $flowList"
+                        # if { [lsearch -exact $generateList $trafficObj ] < 0 } {
+                            # lappend generateList $trafficObj
+                        # }
+                        #Deputs "generateList: $generateList"
                     } else {
                         lappend flowList $trafficObj
-                        lappend generateList $trafficObj
+                        #lappend generateList $trafficObj
+						#Deputs "flowList: $flowList"
+						#Deputs "generateList: $generateList"
                     }                  
 					
                     
@@ -1047,14 +1049,14 @@ Deputs "----- TAG: $tag -----"
                         if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
                             set flowObj [ uplevel 1 " $stream cget -hFlow " ]
                             lappend flowList $flowObj
-                            Deputs "flowList: $flowList"
-                            if { [lsearch -exact $generateList $trafficObj ] < 0 } {
-                                lappend generateList $trafficObj
-                            }
-                            Deputs "generateList: $generateList"
+                            #Deputs "flowList: $flowList"
+                            # if { [lsearch -exact $generateList $trafficObj ] < 0 } {
+                                # lappend generateList $trafficObj
+                            # }
+                            #Deputs "generateList: $generateList"
                         } else {
                             lappend flowList $trafficObj
-                            lappend generateList $trafficObj
+                            #lappend generateList $trafficObj
                         } 
                     }
                 }
@@ -1062,21 +1064,21 @@ Deputs "----- TAG: $tag -----"
         }
 # Start all stream --
         if { ( [ info exists streamList ] == 0 ) && ( [ info exists profileList ] == 0 ) } {
-           
+    Deputs "No args added"       
 			set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
-			Deputs "traObj::$traObj"
+			#Deputs "traObj::$traObj"
             set streamList [ $traObj GetStreamList ]
-			Deputs "streamList:$streamList"
+			#Deputs "streamList:$streamList"
 			foreach stream $streamList {
 				set streamObj [ IxiaCapi::Regexer::GetObject $stream ]
 				
 				#ixNet setA $strObj -suspend False
 				set strObj [ uplevel 1 " $streamObj cget -hStream " ]
 				set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
-				Deputs "strObj::$strObj"
-				Deputs "trafficObj::$trafficObj"
+				#Deputs "strObj::$strObj"
+				#Deputs "trafficObj::$trafficObj"
 				lappend flowList $trafficObj
-                lappend generateList $trafficObj
+                #lappend generateList $trafficObj
 				
 			}
 			
@@ -1098,7 +1100,7 @@ Deputs "----- TAG: $tag -----"
             set nameList ""
             set totalList ""
             set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
-			Deputs "traObj::$traObj"
+			#Deputs "traObj::$traObj"
             set totalstreamList [ $traObj GetStreamList ]
 			
 			foreach stream $totalstreamList {				
@@ -1120,7 +1122,7 @@ Deputs "----- TAG: $tag -----"
             foreach   trafficObj  $totalList {
                 lappend nameList [ixNet getA $trafficObj -name ]
             }
-            foreach   trafficObj  $generateList {
+            foreach   trafficObj  [ixNet getL ::ixNet::OBJ-/traffic trafficItem]  {
                 ixNet exec generate $trafficObj
                 after 1000
             } 
@@ -1145,7 +1147,7 @@ Deputs "----- TAG: $tag -----"
 		if { $restartCaptureJudgement } {
 			catch { 
 				
-				Deputs "start capture..."
+				#Deputs "start capture..."
 				#ixNet exec startCapture
                 foreach hCapture $captureHandle {
                     ixNet exec start $hCapture/capture
@@ -1458,7 +1460,8 @@ Deputs "----- TAG: $tag -----"
 				#namespace inscope $IxiaCapi::ObjectNamespace $command
 				uplevel 1 " eval $command "
 				uplevel 1 " eval $name SetPortName $this "
-                
+				
+                Deputs "flowflag :$flowflag"
                 if { $flowflag == 1} {
                     uplevel 1 " eval $name SetFlowFlag 1 "
                 }

@@ -21,6 +21,16 @@ class Flow {
     #--private method
     method GetProtocolTemp { pro } {}
     method GetField { stack field } {}
+	method unconfig {} {
+    set tag "body Flow::unconfig [info script]"
+Deputs "----- TAG: $tag -----"
+		# catch {
+			# ixNet remove $handle
+			# ixNet commit
+		# }
+		set handle ""
+		return [ GetStandardReturnHeader ]
+	}
 
     
 	method start {} {
