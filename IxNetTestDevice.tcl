@@ -113,13 +113,21 @@ Deputs "delete:$obj"
                 }
             }
         }
+         
+        set traItemList [ixNet getL ::ixNet::OBJ-/traffic trafficItem ]
+        if { $traItemList != "" } {
+            foreach traItem $traItemList {
+                ixNet remove $traItem
+                ixNet commit
+            }
+        }
         
         foreach portObj $PortList {           
 Deputs "port obj:$portObj reset"
             $portObj Reset
         }
 		#IxiaCapi::PortManager Reset
-        IxiaCapi::TrafficManager Reset
+       
         
 		set macPool ""
 Deputs "mac pool clear:$macPool"		
