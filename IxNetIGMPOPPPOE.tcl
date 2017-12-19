@@ -1,3 +1,11 @@
+# Copyright (c) Ixia technologies 2015-2017, Inc.
+
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+
 namespace eval IxiaCapi {
     
     class IGMPOPPPOEClient {
@@ -177,8 +185,9 @@ Deputs "args: $args"
                 }
             }
 			
-            Deputs "gouppoolname:$grouppoolname"
+           
             if {[ info exists grouppoolname ]} {
+            Deputs "gouppoolname:$grouppoolname"
                 #eval $objName join_group -group $grouppoolname
 				$objName join_group -group $grouppoolname
 			} else {

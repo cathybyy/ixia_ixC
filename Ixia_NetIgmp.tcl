@@ -37,7 +37,6 @@ Deputs "----- TAG: $tag -----"
 		
 		}
 		ixNet setA $handle \
-			-name $this \
 			-enabled True
 		ixNet commit
 		if { $intfhandle != "null"} {
@@ -82,6 +81,24 @@ Deputs "----- TAG: $tag -----"
     
     method join_group { args } {}
     method leave_group { args } {}
+	method enable {} {
+	    set tag "body IgmpHost::enable [info script]"
+Deputs "----- TAG: $tag -----"
+        foreach h $handle {
+	        Deputs "h: $handle"
+			ixNet setA $h -enabled true
+			ixNet commit
+		}
+	}
+	method disable {} {
+	    set tag "body IgmpHost::disable [info script]"
+Deputs "----- TAG: $tag -----"
+        foreach h $handle {
+	        Deputs "h: $handle"
+			ixNet setA $h -enabled false
+			ixNet commit
+		}
+	}
     method get_group_stats { args } {}
     method get_host_stats { args } {}
 	method start {} {
@@ -107,7 +124,7 @@ Deputs "----- TAG: $tag -----"
 	public variable view
 	public variable interfacehandle
 	public variable hPort
-	 
+	public variable ixversion
 }
 
 body IgmpHost::constructor { port { intfhandle null } { inttype null } } {
@@ -123,6 +140,7 @@ Deputs "----- TAG: $tag -----"
     set ipaddr_step 	0.0.0.1
     set vlan_id1_step	1
     set vlan_id2_step	1
+	set ixversion igmpv2
 	set interface [ list ]
 	set group_list	[ list ]
 	array set group_handle [list]
@@ -236,6 +254,15 @@ Deputs "Args:$args "
             -unsolicited_report_interval {
             	set unsolicited_report_interval $value
             }
+            -general_query_interval {
+            	set general_query_interval $value
+            }
+            -gq_response_interval {
+            	set gq_response_interval $value
+            }
+            -startup_query_count  {
+                set startup_query_count $value
+            }
 			-active {
             	set active $value
             }
@@ -270,9 +297,16 @@ Deputs "Args:$args "
 				v3 {
 					set ixversion igmpv3
 				}
+                mldv1 {
+					set ixversion version1
+				}
+				mldv2 {
+					set ixversion version2
+				}
 			}
 			ixNet setA $h -version $ixversion
 		}
+        
 		if { [ info exists group_specific ] } {
 			ixNet setA $h -sqResponseMode $group_specific
 		}
@@ -283,19 +317,56 @@ Deputs "Args:$args "
 			ixNet setA $h -routerAlert $router_alert
 		}
 		if { [ info exists unsolicited ] } {
-			ixNet setA $h -upResponseMode $unsolicited
+            switch $ixversion {
+			    igmpv1 -
+				igmpv2 -
+				igmpv3  {
+					ixNet setA $h -upResponseMode $unsolicited
+				}
+                version1 -
+				version2 {
+					ixNet setA $h -enableUnsolicitedResMode $unsolicited
+				}
+			}
+			
 		} else {
-		    ixNet setA $h -upResponseMode True
+            switch $ixversion {
+			    igmpv1 -
+				igmpv2 -
+				igmpv3  {
+					ixNet setA $h -upResponseMode True
+				}
+                version1 -
+				version2 {
+					ixNet setA $h -enableUnsolicitedResMode True
+				}
+			}
+		  
 			ixNet commit
 		}
 		if { [ info exists unsolicited_report_interval ] } {
+
 			ixNet setA $h -reportFreq $unsolicited_report_interval
+			ixNet commit
+		
 		} else {
+	
 		    ixNet setA $h -reportFreq 30
 			ixNet commit
+			# ixNet setA $h -respToQueryImmediately true
+			# ixNet commit
 		}
 		if { [ info exists active ] } {
 			ixNet setA $h -enabled $active
+		}
+        if { [ info exists startup_query_count ] } {
+			ixNet setA $h -startupQueryCount $startup_query_count
+		}
+        if { [ info exists general_query_interval ] } {
+			ixNet setA $h -generalQueryInterval $general_query_interval
+		}
+        if { [ info exists gq_response_interval ] } {
+			ixNet setA $h -gqResponseInterval $gq_response_interval
 		}
 		ixNet commit
 	}
@@ -877,6 +948,7 @@ class MldHost {
     	
     constructor { port { intfhandle null } { inttype null } } { chain $port $intfhandle $inttype} {
 		set view ""
+		set ixversion version1
 	}
 	method join_group { args } {}
 	method reborn { { intfhandle null } { inttype null } } {
@@ -894,7 +966,7 @@ Deputs "----- TAG: $tag -----"
 
 		set handle [ ixNet add $hPort/protocols/mld host ]
 Deputs "handle:$handle"		
-		set handle [ ixNet remapIds $handle ]
+		#set handle [ ixNet remapIds $handle ]
 	
 		ixNet setA $handle \
 			-name $this \
@@ -906,6 +978,7 @@ Deputs "handle:$handle"
 			ixNet commit
 		
 		}
+		set handle [ ixNet remapIds $handle ]
 
 		
 		set protocol mld
@@ -1019,6 +1092,25 @@ Deputs "----- TAG: $tag -----"
 					$group configure -portObj $portObj
 					$group configure -hPort $hPort
 					$group configure -protocol "mld"
+					
+					if {$source_ip != "0.0.0.0"} {
+					    set hSource [ixNet add $hGroup sourceRange ]
+						
+						ixNet setM $hSource \
+						    -count $source_num  \
+							-ipFrom $source_ip
+						ixNet commit
+					} else {
+					    set hSource [ixNet add $hGroup sourceRange ]
+						Deputs "interfacehandle:   $interfacehandle"
+						set ipv6Handle [lindex [ixNet getL $interfacehandle ipv6] 0 ]
+						set ipaddr [ixNet getA $ipv6Handle -ip]
+						ixNet setM $hSource \
+						    -count 1  \
+							-ipFrom $ipaddr
+						ixNet commit
+					}
+					
 				}			
 			}
 		}
@@ -1027,3 +1119,152 @@ Deputs "----- TAG: $tag -----"
 	start
 	return [ GetStandardReturnHeader ]
 }
+
+
+class MldQuery {
+    inherit IgmpHost
+    	
+    constructor { port { intfhandle null } { inttype null } } { chain $port $intfhandle $inttype} {
+		set view ""
+		set ixversion version1
+	}
+	method join_group { args } {}
+	method reborn { { intfhandle null } { inttype null } } {
+    set tag "body MldQuery::reborn [info script]"
+Deputs "----- TAG: $tag -----"
+		if { [ catch {
+			set hPort   [ $portObj cget -handle ]
+		} ] } {
+			error "$errNumber(1) Port Object in DhcpHost ctor"
+		}
+
+		#-- enable mld emulation
+		ixNet setA $hPort/protocols/mld -enabled True
+		ixNet commit
+
+		set handle [ ixNet add $hPort/protocols/mld querier ]
+Deputs "handle:$handle"		
+		set handle [ ixNet remapIds $handle ]
+	
+		ixNet setA $handle \
+			-enabled True
+		ixNet commit
+		if { $intfhandle != "null" && $inttype != "null"} {
+		    ixNet setM $handle  -interfaceType $inttype  \
+			                 -interfaces  $intfhandle
+			ixNet commit
+		
+		}
+
+		
+		set protocol mld
+
+	}
+	method config { args } {
+		eval chain $args -ip_version ipv6 
+	}
+	
+	method start {} {
+		set tag "body MldQuery::start [info script]"
+	Deputs "----- TAG: $tag -----"
+		ixNet exec start $hPort/protocols/mld
+		after 2000
+
+	}
+	method stop {} {
+		set tag "body MldQuery::stop [info script]"
+	Deputs "----- TAG: $tag -----"
+		ixNet exec stop $hPort/protocols/mld
+		after 2000
+		
+
+	}
+	
+	public variable protocolhandle
+}
+body MldQuery::join_group { args } {
+    global errNumber
+    
+    set tag "body MldQuery::join_group [info script]"
+Deputs "----- TAG: $tag -----"
+
+    foreach { key value } $args {
+        set key [string tolower $key]
+        switch -exact -- $key {
+            -group {
+            	set groupList $value
+            }
+            -rate {
+            	set rate $value
+            }
+        }
+    }
+
+	if { [ info exists rate ] } {
+		ixNet setMultiAttrs $hPort/protocols/mld \
+			-numberOfGroups $rate \
+			-timePeriod 1000
+		ixNet commit
+	}
+	
+	if { [ info exists groupList ] } {
+		foreach group $groupList {
+	Deputs Step10
+			if { [ $group isa MulticastGroup ] == 0 } {
+				return [ GetErrorReturnHeader "Invalid MultcastGroup object... $group" ]
+			}
+	Deputs Step20
+			set grpIndex [ lsearch $group_list $group ]
+			if { $grpIndex >= 0 } {
+	Deputs Step30
+				foreach hMld $handle {
+
+					set hGroup	$group_handle($group,$hMld)
+					ixNet setA $hGroup -enabled True
+					ixNet commit
+				}
+			} else {
+	Deputs Step40
+				set filter_mode [ $group cget -filter_mode ]
+				set group_ip [ $group cget -group_ip ]
+				set group_num [ $group cget -group_num ]
+				set group_step [ $group cget -group_step ]
+				set group_modbit [ $group cget -group_modbit ]
+				set source_ip [ $group cget -source_ip ]
+				set source_num [ $group cget -source_num ]
+				set source_step [ $group cget -source_step ]
+				set source_modbit [ $group cget -source_modbit ]
+	Deputs "=group prop= filter_mode:$filter_mode group_ip:$group_ip group_num:$group_num group_step:$group_step group_modbit:$group_modbit source_ip:$source_ip source_num:$source_num source_step:$source_step source_modbit:$source_modbit"
+	Deputs Step45
+				foreach hMld $handle {
+					set hGroup [ ixNet add $hMld groupRange ]
+					ixNet setM $hGroup \
+						-enabled True \
+						-groupCount $group_num \
+						-groupIpFrom $group_ip \
+						-incrementStep $group_step \
+						-sourceMode $filter_mode
+					ixNet commit
+					set hGroup [ ixNet remapIds $hGroup ]
+		Deputs Step50			
+		Deputs "group handle:$hGroup"
+		Deputs "group handle array names: [ array names group_handle ]"
+					set group_handle($group,$hMld) $hGroup
+		Deputs Step60
+					lappend group_list $group
+		Deputs "group handle names:[ array names group_handle ]"
+		Deputs "group list:$group_list"
+		
+					$group configure -handle $hGroup
+					$group configure -portObj $portObj
+					$group configure -hPort $hPort
+					$group configure -protocol "mld"
+				}			
+			}
+		}
+	}
+
+	start
+	return [ GetStandardReturnHeader ]
+}
+

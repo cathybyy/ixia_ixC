@@ -1,4 +1,3 @@
-
 # Copyright (c) Ixia technologies 2010-2011, Inc.
 
 # Release Version 1.1
@@ -9,6 +8,8 @@
 # Version 1.1.14.58
 #		2. Add ipv4_addr ipv4_gw ipv4_prefix_len ipv6_addr ipv6_gw ipv6_prefix_len in config
 #		3. Add SimulatedRoute class
+# Version 1.1.14.59
+#       4. Add uncofig 2017.7.17
 
 class IsisSession {
     inherit RouterEmulationObject
@@ -19,6 +20,36 @@ class IsisSession {
 	method set_route { args } {}
 	method advertise_route { args } {}
 	method withdraw_route { args } {}
+	method unconfig {} {
+	    set tag "body IsisSession::unconfig [info script]"
+		Deputs "----- TAG: $tag -----"		
+		catch {
+		    
+			set ptemp [ixNet getL $hPort/protocols/isis router]
+			Deputs "$ptemp"
+			if {[llength $ptemp] == 1 } {
+			    set temphandle $hPort
+			    chain
+			    Deputs "disable $temphandle isis protocol"
+				ixNet setA $temphandle/protocols/isis -enabled false
+				ixNet commit
+			} else {
+			    chain
+			}
+		}
+						
+	}
+	
+	method start {} {
+	    set tag "body IsisSession::start [info script]"
+    Deputs "----- TAG: $tag -----"
+	    ixNet exec start $hPort/protocols/isis
+	}
+	method stop {} {
+	    set tag "body IsisSession::stop [info script]"
+    Deputs "----- TAG: $tag -----"
+	    ixNet exec stop $hPort/protocols/isis
+	}
 
 	public variable mac_addr
 	public variable routeBlock
@@ -94,6 +125,7 @@ Deputs "port handle: $hPort"
 	    error "$errNumber(1) Port Object in IsisSession ctor"
     }
 Deputs "initial port..."
+Deputs "hint: $hint"
     if { $hint != "null" } {
 	    reborn $hint
 	} else {
@@ -106,7 +138,7 @@ body IsisSession::config { args } {
     set tag "body IsisSession::config [info script]"
 Deputs "----- TAG: $tag -----"
 	
-	set sys_id "64:01:00:01:00:00"
+	#set sys_id "64:01:00:01:00:00"
 # in case the handle was removed
     if { $handle == "" } {
 	    reborn
@@ -194,6 +226,15 @@ Deputs "wrong mac addr: $value"
 			-level {
 				set level $value
 			}
+            -l2routerpriority {
+				set l2routerpriority $value
+			}
+            -l1routerpriority {
+				set l1routerpriority $value
+			}
+			-flagwidemetric {
+				set flagwidemetric $value
+			}
 			-ipv4_addr {
 				set ipv4_addr $value
 			}
@@ -201,7 +242,12 @@ Deputs "wrong mac addr: $value"
 				set ipv4_prefix_len $value
 			}
 			-ipv4_gw {
-				set ipv4_gw $value
+                if {[IsIPv4Address $value]} {
+                    set ipv4_gw $value
+                } elseif {[IsIPv6Address $value]} {
+                    set ipv6_gw $value
+                }
+				
 			}
 		}
     }
@@ -271,6 +317,12 @@ Deputs "wrong mac addr: $value"
 		}
 		ixNet setA $rb_interface -level $level
 	}
+    if { [ info exists l2routerpriority ] } {
+	    ixNet setA $rb_interface -priorityLevel2 $l2routerpriority
+    }
+    if { [ info exists l1routerpriority ] } {
+	    ixNet setA $rb_interface -priorityLevel1 $l1routerpriority
+    }
 	
     if { [ info exists sys_id ] } {
 		while { [ ixNet getF $hPort/protocols/isis router -systemId "[ split $sys_id : ]"  ] != "" } {
@@ -320,6 +372,10 @@ Deputs "sys_id: $sys_id"
 		    ixNet setA $handle -areaAddressList [list $areaid ]
 		}			
     }
+	if { [ info exists flagwidemetric ] } {
+	    ixNet setA $handle -enableWideMetric $flagwidemetric
+		ixNet commit
+    }
 
 	if { [ info exists mac_addr ] } {
 Deputs "interface:$interface mac_addr:$mac_addr"
@@ -355,7 +411,8 @@ Deputs "Args:$args "
 			set step 		[ $rb cget -step ]
 			set prefix_len 	[ $rb cget -prefix_len ]
 			set start 		[ $rb cget -start ]
-			set type 		[ $rb cget -type ] 
+			set type 		[ $rb cget -type ]
+            set origin 		[ $rb cget -origin ]            
            
 			
 			set hRouteBlock [ ixNet add $handle routeRange ]
@@ -363,14 +420,28 @@ Deputs "Args:$args "
 			set hRouteBlock [ ixNet remapIds $hRouteBlock ]
 			set routeBlock($rb,handle) $hRouteBlock
 			lappend routeBlock(obj) $rb
-			
-			ixNet setM $hRouteBlock \
+						
+			if {$origin != "" } { 
+                ixNet setA $hRouteBlock \
+                    -origin $origin  
+                ixNet commit
+            }	
+            ixNet setM $hRouteBlock \
+                -type $type  \
 				-numberOfRoutes $num \
-				-ipType $type \
 				-firstRoute $start \
-				-maskWidth $prefix_len 
+				-maskWidth $prefix_len  \
+                -metric 1
 				
 			ixNet commit
+            
+
+
+            ixNet setA $hRouteBlock \
+              -numberOfRoutes $num
+            ixNet commit
+
+            
             
 
 			$rb configure -handle $hRouteBlock

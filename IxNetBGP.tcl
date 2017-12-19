@@ -1,3 +1,13 @@
+# Copyright (c) Ixia technologies 2015-2017, Inc.
+
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+
+
+
 namespace eval IxiaCapi {
     
     class BgpRouter {
@@ -31,7 +41,7 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
@@ -39,10 +49,13 @@ Deputs "----- TAG: $tag -----"
             eval ProtocolConvertObject::convert $args
 			puts $objName 
 			puts $newargs
-            RouteBlock $blocknamename
-			lappend blockNameList $blocknamename
-            eval $blocknamename config $newargs
-            eval $objName set_route -route_block  $blocknamename
+					
+            RouteBlock $blockname
+			lappend blockNameList $blockname
+			puts "blockNameList: $blockNameList"
+			
+            eval $blockname config $newargs
+            eval $objName set_route -route_block  $blockname
 			     
         }
         
@@ -53,7 +66,7 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
@@ -61,21 +74,51 @@ Deputs "----- TAG: $tag -----"
             eval ProtocolConvertObject::convert $args
 			puts $objName 
 			puts $newargs  			
-            eval $blocknamename config $newargs
-            eval $objName set_route -route_block $blocknamename
+            eval $blockname config $newargs
+            eval $objName set_route -route_block $blockname
 			     
+        }
+        
+        method DeleteRouteBlock { args } {
+            set tag "body BgpRouter::DeleteRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockNameList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockNameList [ lreplace $blockNameList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockNameList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockNameList ""
+            }
         }
         
         method StartRouter {} {
             set tag "body BgpRouter::StartRouter [info script]"
 Deputs "----- TAG: $tag -----"
-            eval $objName start
+            $objName start
             
         }
         method StopRouter {} {
             set tag "body BgpRouter::StopRouter [info script]"
 Deputs "----- TAG: $tag -----"
-            eval $objName stop
+            $objName stop
         }
         method AdvertiseRouteBlock { args } {
             set tag "body BgpRouter::AdvertiseRouteBlock [info script]"
@@ -84,15 +127,15 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
 			}
 			if { [info exists blockname ] } {
-                eval $objName advertise_route -route_block $blocknamename
+                $objName advertise_route -route_block $blockname
 			} else {
-			    eval $objName advertise_route
+			    $objName advertise_route
 			}
         }
         method WithdrawRouteBlock { args } {
@@ -102,29 +145,37 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
 			}
 			if { [info exists blockname ] } {
-               eval $objName withdraw_route -route_block $blocknamename
+               $objName withdraw_route -route_block $blockname
 			} else {
-			   eval $objName withdraw_route
+			   $objName withdraw_route
 			}
         }
        
         method GetRouterStats {} {
             set tag "body BgpRouter::GetRouterStats [info script]"
 Deputs "----- TAG: $tag -----"
-            eval $objName get_detailed_stats
+            $objName get_detailed_stats
         }
         method GetHostResults {} {
             set tag "body BgpRouter::GetHostResults [info script]"
 Deputs "----- TAG: $tag -----"
-            eval $objName get_detailed_stats
+            $objName get_detailed_stats
         }
-        destructor {} 
+        destructor {
+            set tag "body BgpRouter::dtor [info script]"
+Deputs "----- TAG: $tag -----"
+            if {$blockNameList != ""} {
+                foreach blockItem $blockNameList {
+                    catch { uplevel " delete object $blockItem " }
+                }
+            }
+        } 
         
       
     }
@@ -132,11 +183,16 @@ Deputs "----- TAG: $tag -----"
 	class BgpV4Router {
 	    inherit BgpRouter
         
-        constructor { Port { routerId null } } {
+        constructor { Port { routerId null } { hostname null } } {
             set tag "body BgpV4Router::ctor [info script]"
 Deputs "----- TAG: $tag -----"
             set className BgpSession
             BgpSession ${this}_c  $Port
+            if { $hostname != "null" } {
+			   set intfhandle [ $hostname cget -interface]
+			   ${this}_c config -hint $intfhandle
+               
+            } 
             if { $routerId != "null" } {
                ${this}_c config -router_id $routerId
             }
@@ -146,38 +202,38 @@ Deputs "----- TAG: $tag -----"
             set argslist(-peertype)                  -type
             set argslist(-routerid)                  -router_id
             set argslist(-testerip)                  -ipv4_addr           
-            set argslist(-testeras)                 -as
-            set argslist(-sutip)                    -dut_ip
-            set argslist(-sutas)                    -dut_as                                
-			#set argslist(-flagmd5)                       
-            #set argslist(-md5)
+            set argslist(-testeras)                  -as
+            set argslist(-sutip)                     -dut_ip
+            set argslist(-sutas)                     -dut_as                                
+			set argslist(-flagmd5)                    -flagmd5
+            set argslist(-md5)                        -md5
             set argslist(-holdtimer)                  -hold_time_interval
             set argslist(-keepalivetimer)             -update_Interval              
             #set argslist(-connectretrytimer)                      
             #set argslist(-connectretrycount)              
-            set argslist(-routesperupdate)                  -max_routes_per_update
+            set argslist(-routesperupdate)            -max_routes_per_update
             #set argslist(-interupdatedelay)                 
             #set argslist(-flagendofrib)
             #set argslist(-flaglabelroutecapture)
             #set argslist(-startingLabel)             
             #set argslist(-endingLabel)   
             set argslist(-as_path)                    -as_path 			
-            set argslist(-active)                    -active 
-            set argslist(-addressfamily)                    -address_family  
-            set argslist(-firstroute)                    -start   
-            set argslist(-routenum)                    -num  
-            set argslist(-prefixlen)                    -prefix_len   
+            set argslist(-active)                     -active 
+            set argslist(-addressfamily)              -address_family  
+            set argslist(-firstroute)                 -start   
+            set argslist(-routenum)                   -num  
+            set argslist(-prefixlen)                  -prefix_len   
             set argslist(-modifer)                    -step  
             set argslist(-nexthop)                    -nexthop 
-			set argslist(-origin)                    -origin
-			set argslist(-med)                    -med
-			set argslist(-local_pref)                    -local_pref
-			set argslist(-cluster_list)                    -cluster_list
-			set argslist(-flagatomicaggregate)                    -flag_atomic_agg
-			set argslist(-aggregator_as)                    -agg_as
-			set argslist(-aggregator_ipaddress)                    -agg_ip
-			set argslist(-originator_id)                    -originator_id
-			set argslist(-communities)                    -communities
+			set argslist(-origin)                     -origin
+			set argslist(-med)                        -med
+			set argslist(-local_pref)                 -local_pref
+			set argslist(-cluster_list)               -cluster_list
+			set argslist(-flagatomicaggregate)         -flag_atomic_agg
+			set argslist(-aggregator_as)               -agg_as
+			set argslist(-aggregator_ipaddress)        -agg_ip
+			set argslist(-originator_id)               -originator_id
+			set argslist(-communities)                 -communities
 			#set argslist(-flaglabel)                    -flag_label
 			#set argslist(-labelmode)                    -label_mode
 			#set argslist(-userlabel)                    -user_label
@@ -194,12 +250,22 @@ Deputs "----- TAG: $tag -----"
 	class BgpV6Router {
 	    inherit BgpRouter
         
-        constructor { Port { routerId null } } {
+        constructor { Port { routerId null } { hostname null } } {
             set tag "body BgpV6Router::ctor [info script]"
 Deputs "----- TAG: $tag -----"
             set className BgpSession
             BgpSession ${this}_c  $Port
-			${this}_c config -ip_version ipv6
+            
+            if { $hostname != "null" } {
+			   set intfhandle [ $hostname cget -interface]
+			   ${this}_c config -hint $intfhandle -ip_version ipv6
+               
+            } else {
+               ${this}_c config -ip_version ipv6
+            }
+            
+			
+            
             if { $routerId != "null" } {
                ${this}_c config -router_id $routerId 
             }
@@ -212,8 +278,8 @@ Deputs "----- TAG: $tag -----"
             set argslist(-testeras)                  -as
             set argslist(-sutip)                     -dut_ip
             set argslist(-sutas)                     -dut_as                                
-			#set argslist(-flagmd5)                       
-            #set argslist(-md5)
+			set argslist(-flagmd5)                    -flagmd5  
+            set argslist(-md5)                        -md5
             set argslist(-holdtimer)                  -hold_time_interval
             set argslist(-keepalivetimer)             -update_Interval              
             #set argslist(-connectretrytimer)                      

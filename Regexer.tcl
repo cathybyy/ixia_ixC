@@ -343,12 +343,18 @@ Deputs "Invalid ipv4 format"
 		    set elenum [string index $hex $i]
 			
 		    switch $elenum {
-			a { set elenum 10}
-			b { set elenum 11}
-			c { set elenum 12}
-			d { set elenum 13}
-			e { set elenum 14}
-			f { set elenum 15}
+			a -
+            A { set elenum 10}
+			b - 
+            B { set elenum 11}
+			c -
+            C { set elenum 12}
+			d -
+            D { set elenum 13}
+			e -
+            E { set elenum 14}
+			f -
+            F { set elenum 15}
 			}
 			set intele [format %d $elenum]
 		    set newInt [expr $newInt *16 + $intele]

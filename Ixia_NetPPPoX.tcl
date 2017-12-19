@@ -343,7 +343,16 @@ body PppoeHost::connect {} {
     set tag "body PppoeHost::connect [info script]"
 Deputs "----- TAG: $tag -----"
 Deputs "handle :$handle"
-		
+	
+	set parent [ixNet getP $handle]
+	set ranges [ ixNet getL $parent range ]
+	foreach range $ranges {
+	
+		if { $range == $handle } { continue }
+		if { [ ixNet getA $range/pppoxRange -enabled ] == true } {
+			ixNet exec pppoxStart $range async
+		}
+	}
     ixNet exec pppoxStart $handle async
   
 }

@@ -81,6 +81,8 @@
 #       35. DhcpHost.set_dhcp_msg_option add -enable_hex_value
 # Version 1.27 3.14
 #       36. add Dot1xHost
+# Version 2.28 7.20
+#       37. merge dhcp option
 
 
 
@@ -287,6 +289,7 @@ body DhcpHost::config { args } {
 Deputs "----- TAG: $tag -----"
 #disable the interface
     set use_broadcast_flag "true"
+
     eval { chain } $args
 	
 #param collection
@@ -353,12 +356,12 @@ Deputs "Args:$args "
                     error "$errNumber(1) key:$key value:$value"
                 }                
             }		   
-		   -relay_client_mac_addr_start {
+		    -relay_client_mac_addr_start {
 			  
-		   }		   
-		   -relay_client_mac_addr_step {
+		    }		   
+		    -relay_client_mac_addr_step {
 			   
-		   }		   
+		    }		   
             -remote_id {
                 set remote_id $value
             }
@@ -386,10 +389,10 @@ Deputs "Args:$args "
                 }
             }		   
 		    -use_broadcast_flag {
-			    set use_broadcast_flag $value
+			  set use_broadcast_flag $value
 		    }		   
 		    -relay_server_ipv4_addr_step {
-			    set relay_server_ipv4_addr_step $value
+			  set relay_server_ipv4_addr_step $value
 		    }
             -request_and_discovery_option_type {
 			    set request_and_discovery_option_type $value
@@ -397,7 +400,13 @@ Deputs "Args:$args "
             -request_and_discovery_option_value {
 			    set request_and_discovery_option_value $value
 		    }
-        }
+			-option60 {
+				set option60 $value
+			}
+            -solicit_attempt {
+				set solicit_attempt $value
+			}
+		}
     }
 	set range $handle
     if { [ info exists count ] } {
@@ -444,7 +453,9 @@ Deputs "Args:$args "
                 
                 }
                 set dhcprequestlist [ixNet getA $range/dhcpRange -dhcp4ParamRequestList]
-                set dhcprequestlist "$dhcprequestlist; $code"
+                #set dhcprequestlist "$dhcprequestlist; $code"
+                #set dhcprequestlist $code
+                set dhcprequestlist "1; $code"
                 ixNet setA $range/dhcpRange -dhcp4ParamRequestList $dhcprequestlist
                 ixNet commit
                 
@@ -463,7 +474,8 @@ Deputs "Args:$args "
                 ixNet setA $range/dhcpRange -useTrustedNetworkElement true
                 ixNet commit
                 if {[regexp -nocase {0103} $request_and_discovery_option_value]} {
-                    set code [string trim $request_and_discovery_option_value "0103" ] 
+                    set code [string trim $request_and_discovery_option_value "0103" ]
+                    set code "0x${code}"
                     ixNet setA $range/dhcpRange -relayUseCircuitId true
                     ixNet commit
                     ixNet setA $range/dhcpRange -relayCircuitId $code
@@ -507,7 +519,20 @@ Deputs "Args:$args "
 		set global [ ixNet getL $root/globals/protocolStack dhcpGlobals ]
 		ixNet setA $global -dhcp4AddrLeaseTime $suggest_lease
 	}
-    ixNet commit
+    
+    if { [ info exists solicit_attempt ] } {
+		set root [ixNet getRoot]
+		set global [ ixNet getL $root/globals/protocolStack dhcpGlobals ]
+		ixNet setA $global -dhcp6SolMaxRc $solicit_attempt
+	}
+    
+
+	# added for ipoe default behavior of domain auth
+	if { [ info exists option60 ] } {
+Deputs "-----configure option 60 -----"	
+		set_dhcp_msg_option -msg_type discover -option_type 60 -payload $option60
+	}
+	ixNet commit
     return [GetStandardReturnHeader]
 }
 body DhcpHost::request {} {
@@ -529,6 +554,18 @@ Deputs "err:$err"
 	set completeTimestamp [ clock seconds ]
 	set requestDuration [ expr $completeTimestamp - $requestTimestamp ]
 #-- make sure the stats will be updated
+
+	set siblin [ ixNet getL $hPort/protocolStack ethernet ]
+	foreach range $siblin {
+		set dhcp [ ixNet getL $range dhcpEndpoint ]
+		set dhcpRange [ ixNet getL $dhcp range ]
+Deputs [ixNet getA $dhcpRange/dhcpRange -enabled]
+		if { [ ixNet getA $dhcpRange/dhcpRange -enabled ] == "true" && $dhcpRange != $handle } {
+Deputs "siblin $dhcpRange : [ ixNet getA $dhcpRange -enable ] rebind"	
+			ixNet exec start $dhcpRange
+		}
+	}
+
     return [GetStandardReturnHeader]
 }
 body DhcpHost::release {} {
@@ -1628,14 +1665,14 @@ Deputs "Args:$args "
                     		}
             		}
             		set group $value
-        	}
-        	-action {
-        		set value [ string tolower $value ]
+                }
+                -action {
+                    set value [ string tolower $value ]
                         if { [ lsearch -exact $EAction $value ] >= 0 } {
                             
                             set action $value
                         } else {
-                        	return [GetErrorReturnHeader "Unsupported functionality."]
+                            return [GetErrorReturnHeader "Unsupported functionality."]
                         }
                 }
             }
@@ -1824,16 +1861,14 @@ Deputs "Args:$args "
                 } else {
                     error "$errNumber(1) key:$key value:$value"
                 }
-            }
-		   
+            }		   
 		   -iaid {
 			   if { [ string is integer $value ] } {
 				   set iaid $value
 			   } else {
 				   error "$errNumber(1) key:$key value:$value"
 			   }
-		   }
-		   
+		   }		   
 			-session_type -
 			-client_mode -
 			-ia_type {
@@ -1850,6 +1885,9 @@ Deputs "Args:$args "
 				} else {
                     error "$errNumber(1) key:$key value:$value"
                 }                
+			}
+            -option_value {
+			    set option_value $value
 			}
             -option_payload {
                 set option_payload $value
@@ -1900,6 +1938,7 @@ Deputs "Args:$args "
         }
         set dhcprequestlist [ixNet getA $range/dhcpRange -dhcp6ParamRequestList]
         set dhcprequestlist "$dhcprequestlist; $code"
+        Deputs "-----dhcpv6 option list $dhcprequestlist"
         ixNet setA $range/dhcpRange -dhcp6ParamRequestList $dhcprequestlist
         ixNet commit
 	}
@@ -2250,7 +2289,7 @@ Deputs "----- TAG: $tag -----"
     global errorInfo
     global errNumber
 Deputs "handle:$handle"
-    set ipv4_prefix_len 24
+
 	eval chain $args
 
 #param collection
@@ -2267,6 +2306,12 @@ Deputs "Args:$args "
                 # } else {
                     # error "$errNumber(1) key:$key value:$value"
                 # }
+            }
+            -pool_ip_modifier {
+               
+                    set pool_ip_modifier $value
+                 
+               
             }
             -pool_ip_pfx {
                 # if { [ string is integer $value ] && ( $value < 32 ) && ( $value > 0 ) } {
@@ -2349,6 +2394,14 @@ Deputs Step20
 Deputs Step25
     if { [ info exists pool_ip_start ] } {
         ixNet setA $range/dhcpServerRange -ipAddress $pool_ip_start
+    }
+    if { [ info exists pool_ip_modifier ] } {
+        if { [IsIPv4Address $pool_ip_start] } {
+            set pool_ip_modifier [GetIpStep 0 $pool_ip_modifier]
+        } else {
+            set pool_ip_modifier [GetIpv6Step 0 $pool_ip_modifier]
+        }
+        ixNet setA $range/dhcpServerRange -ipAddressIncrement $pool_ip_modifier
     }
 Deputs Step30
     if { [ info exists domain_name_server_list ] } {

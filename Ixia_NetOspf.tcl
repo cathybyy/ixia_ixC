@@ -9,13 +9,16 @@
 #       2. Update
 # Version 1.1.4.34
 #		3. Add reborn in Ospfv2Session.config Ospfv3Session.config
+# Version 1.1.4.25
+#       4. Add uncofig 2017.7.17
+#       5. add hint in ctor,reborn
 
 class OspfSession {
     inherit RouterEmulationObject
     
 	public variable hNetworkRange
 	
-    constructor { port } {
+    constructor { port { hint null } } {
 		global errNumber
 		
 		set tag "body OspfvSession::ctor [info script]"
@@ -23,10 +26,15 @@ Deputs "----- TAG: $tag -----"
 
 		set portObj [ GetObject $port ]
 		set handle ""
-		reborn
+        if { $hint != "null" } {
+	        reborn $hint
+        } else {
+            reborn
+        }
+		
 	}
 	
-	method reborn {} {
+	method reborn { {hint null } } {
 		set tag "body OspfSession::reborn [info script]"
 Deputs "----- TAG: $tag -----"
 
@@ -39,17 +47,22 @@ Deputs "----- TAG: $tag -----"
 		ixNet setM $hPort/protocols/ospf -enableDrOrBdr True
 		ixNet setM $hPort/protocols/ospfV3 -enableDrOrBdr True
 		ixNet commit
+		if { $hint == "null" } {
+            set rb_interface [ ixNet getL $hPort interface ]
+            if { [ llength $rb_interface ] == 0 } {
+                set rb_interface [ ixNet add $hPort interface ]
+                ixNet setA $rb_interface -enabled True
+                ixNet commit
+                set rb_interface [ ixNet remapIds $rb_interface ]
+        
+            } else {
+                set rb_interface [  lindex $rb_interface end ]
+            }
+        } else {
+            set rb_interface $hint
+        }
 		
-		set rb_interface [ ixNet getL $hPort interface ]
-		if { [ llength $rb_interface ] == 0 } {
-			set rb_interface [ ixNet add $hPort interface ]
-			ixNet setA $rb_interface -enabled True
-			ixNet commit
-			set rb_interface [ ixNet remapIds $rb_interface ]
-	
-	    } else {
-		    set rb_interface [  lindex $rb_interface end ]
-		}
+        
 	    Deputs "rb_interface is: $rb_interface"
 		array set interface [ list ]
 		
@@ -419,16 +432,16 @@ Deputs "----- TAG: $tag -----"
 class Ospfv2Session {
 	inherit OspfSession
 
-    constructor { port } { chain $port } {
+    constructor { port { hint null } } { chain $port $hint } {
 		set tag "body Ospfv2Session::ctor [info script]"
 Deputs "----- TAG: $tag -----"
         
     }
 	
-	method reborn {} {
+	method reborn {{ hint null }} {
 		set tag "body Ospfv2Session::reborn [info script]"
 Deputs "----- TAG: $tag -----"
-		chain
+		chain $hint
 		
 		ixNet setA $hPort/protocols/ospf -enabled True
 		ixNet commit
@@ -447,6 +460,25 @@ Deputs "handle:$handle"
 	method config { args } {}
 	method get_status {} {}
 	method get_stats {} {}
+	method unconfig {} {
+	    set tag "body Ospfv2Session::unconfig [info script]"
+		Deputs "----- TAG: $tag -----"		
+		catch {
+		    
+			set ptemp [ixNet getL $hPort/protocols/ospf router]
+			Deputs "$ptemp"
+			if {[llength $ptemp] == 1 } {
+			    set temphandle $hPort
+			    chain
+			    Deputs "disable $temphandle ospf protocol"
+				ixNet setA $temphandle/protocols/ospf -enabled false
+				ixNet commit
+			} else {
+			    chain
+			}
+		}
+						
+	}
 }
 body Ospfv2Session::get_status {} {
 
@@ -963,17 +995,17 @@ Deputs "via interface:$viaInt"
 class Ospfv3Session {
 	inherit OspfSession
 	
-    constructor { port } { chain $port } {
+    constructor { port { hint null } } { chain $port $hint} {
 		set tag "body Ospfv3Session::ctor [info script]"
 Deputs "----- TAG: $tag -----"
 	    
 
     }
 	
-	method reborn {} {
+	method reborn { { hint null } } {
 		set tag "body Ospfv3Session::reborn [info script]"
 Deputs "----- TAG: $tag -----"
-		chain
+		chain $hint
 	    if {[ixNet getA $hPort/protocols/ospf -enabled]} {
 		    ixNet setM $hPort/protocols/ospf -enabled False
 	    }	    
@@ -994,6 +1026,25 @@ Deputs "handle:$handle"
 	method config { agrs } {}
 	method get_status {} {}
 	method get_stats {} {}
+	method unconfig {} {
+	    set tag "body Ospfv3Session::unconfig [info script]"
+		Deputs "----- TAG: $tag -----"		
+		catch {
+		    
+			set ptemp [ixNet getL $hPort/protocols/ospfV3 router]
+			Deputs "$ptemp"
+			if {[llength $ptemp] == 1 } {
+			    set temphandle $hPort
+			    chain
+			    Deputs "disable $temphandle ospfV3 protocol"
+				ixNet setA $temphandle/protocols/ospfV3 -enabled false
+				ixNet commit
+			} else {
+			    chain
+			}
+		}
+						
+	}
 }
 body Ospfv3Session::get_status {} {
 
@@ -1710,11 +1761,20 @@ Deputs "Args:$args "
 			return [GetErrorReturnHeader "No object found...-route_block"]
 			
 		}
-		
+        
+        set origin	    [ $rb cget -origin ]
+		if {$origin != ""} {
+            ixNet setA $handle \
+			    -origin $origin
+            ixNet commit
+        }
+        
+        
 		set num 		[ $rb cget -num ]
 		set start 		[ $rb cget -start ]
 		set step		[ $rb cget -step ]
 		set prefix_len	[ $rb cget -prefix_len ]
+       
 		
 		ixNet setM $handle \
 			-mask $prefix_len \
@@ -1722,6 +1782,7 @@ Deputs "Args:$args "
 			-numberOfRoutes $num \
 			-metric $step   \
       		-enabled True
+        
 		
 	} else {
 	

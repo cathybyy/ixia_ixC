@@ -1,3 +1,17 @@
+# Copyright (c) Ixia technologies 2010-2011, Inc.
+
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+# Version 1.1
+#       1.modify CreateTopSummaryRouteBlock origin sameArea
+#       2.modify CreateTopExternalRouteBlock origin externalType2
+# Version 1.2
+#       1. add deleteblock
+#       2. add hostname in ctor
+
 namespace eval IxiaCapi {
     
     class Ospfv2Router {
@@ -6,12 +20,21 @@ namespace eval IxiaCapi {
         #public variable argslist
         public variable objName
         public variable className
-        constructor { Port { routerId null } } {
+        public variable blockList
+        constructor { Port { routerId null } { hostname null } } {
             set tag "body Ospfv2Router::ctor [info script]"
 Deputs "----- TAG: $tag -----"
 
             set className Ospfv2Session
-            Ospfv2Session ${this}_c  $Port
+            set blockList ""
+            if { $hostname != "null" } {
+			    set intfhandle [ $hostname cget -interface]
+			    Ospfv2Session ${this}_c  $Port $intfhandle
+              
+            } else {
+			    Ospfv2Session ${this}_c  $Port
+			}
+           
             if { $routerId != "null" } {
                ${this}_c config -terouter_id $routerId
             }
@@ -71,6 +94,7 @@ Deputs "----- TAG: $tag -----"
             set prefixlen 16
 			set number 1
 			set modifier 1
+            set origin "sameArea"
 			
             foreach { key value } $args {
                 set key [string tolower $key]
@@ -99,15 +123,48 @@ Deputs "----- TAG: $tag -----"
 			}
             
             RouteBlock $blockname
+            lappend blockList $blockname
             eval $blockname config -start $startingaddress \
 			    -step $modifier \
 				-prefix_len $prefixlen \
-				-num $number
+				-num $number   \
+                -origin  $origin
+                
 			
 			#SimulatedSummaryRoute ${blockname}_s $objName
 			#eval ${blockname}_s config -route_block $blockname
 			
 			     
+        }
+        
+        method DeleteTopSummaryRouteBlock { args } {
+            set tag "body Ospfv2Router::DeleteTopSummaryRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockList [ lreplace $blockList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockList ""
+            }
         }
         
         method ConfigRouteBlock { args } {
@@ -152,6 +209,7 @@ Deputs "----- TAG: $tag -----"
 				}
 			}
            SimulatedRouter $routername $objName
+          
 		   eval $routername config -id $routerid -type $routertypevalue
             
         }
@@ -164,6 +222,7 @@ Deputs "----- TAG: $tag -----"
             set prefixlen 16
 			set number 1
 			set modifier 1
+            set origin "externalType2"
 			
             foreach { key value } $args {
                 set key [string tolower $key]
@@ -188,19 +247,59 @@ Deputs "----- TAG: $tag -----"
 					    set modifier $value
 												
 					}
+                    -type {
+                        if {$value == "type_2"} {
+                            set origin "externalType2"
+                        } elseif { $value == "type_1" } {
+                            set origin "externalType1"
+                        }
+                       
+                    }
 				}
 			}
             
             RouteBlock $blockname
+            lappend blockList $blockname
             eval $blockname config -start $startingaddress \
 			    -step $modifier \
 				-prefix_len $prefixlen \
-				-num $number
+				-num $number  \
+                -origin $origin
 				
 			#SimulatedExternalRoute ${blockname}_s $objName
 			#eval ${blockname}_s config -route_block $blockname
            
             
+        }
+        
+        method DeleteTopExternalRouteBlock { args } {
+            set tag "body Ospfv2Router::DeleteTopExternalRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockList [ lreplace $blockList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockList ""
+            }
         }
 		
 		method AddTopRouterLink { args } {
@@ -232,7 +331,7 @@ Deputs "----- TAG: $tag -----"
           
 		   Deputs "routername:$routername"
 		   SimulatedLink $linkname $objName
-		   eval $linkname config -metric $linkmetric -route_block $linkconnectedname
+		   eval $linkname config -metric $linkmetric -route_block $linkconnectedname 
             
         }
         
@@ -303,7 +402,15 @@ Deputs "----- TAG: $tag -----"
 Deputs "----- TAG: $tag -----"
             eval $objName get_detailed_stats
         }
-        destructor {}
+        destructor  {
+            set tag "body Ospfv2Router::dtor [info script]"
+Deputs "----- TAG: $tag -----"
+            if {$blockList != ""} {
+                foreach blockItem $blockList {
+                    catch { uplevel " delete object $blockItem " }
+                }
+            }
+        }
         
       
     }
@@ -314,42 +421,52 @@ Deputs "----- TAG: $tag -----"
         #public variable argslist
         public variable objName
         public variable className
-        constructor { Port { routerId null } } {
+        public variable blockList
+        constructor { Port { routerId null } { hostname null } } {
             set tag "body Ospfv3Router::ctor [info script]"
 Deputs "----- TAG: $tag -----"
 
             set className Ospfv3Session
-            Ospfv3Session ${this}_c  $Port
+            set blockList ""
+            if { $hostname != "null" } {
+			    set intfhandle [ $hostname cget -interface]
+			    Ospfv3Session ${this}_c  $Port $intfhandle
+              
+            } else {
+			    Ospfv3Session ${this}_c  $Port
+			}
+            
             if { $routerId != "null" } {
                ${this}_c config -router_id $routerId
             }
             
             
             set objName ${this}_c
-			set argslist(-routerid)               -router_id
-			set argslist(-macaddr)                -mac_addr
-			set argslist(-ipaddr)                 -ipv6_addr
-			set argslist(-prefixlen)              -ipv6_prefix_len			
-            set argslist(-area)                   -area_id
-			set argslist(-networktype)            -network_type
-			set argslist(-optionvalue)             -options
-            set argslist(-sutipaddress)            -ipv6_gw
+			set argslist(-routerid)                 -router_id
+			set argslist(-macaddr)                  -mac_addr
+			set argslist(-ipaddr)                   -ipv6_addr
+			set argslist(-prefixlen)                -ipv6_prefix_len			
+            set argslist(-area)                     -area_id
+			set argslist(-networktype)              -network_type
+			set argslist(-optionvalue)              -options
+            set argslist(-sutipaddress)             -ipv6_gw
 			#set argslist(-sutprefixlen)            -ipv6_prefix_len			
-            #set argslist(-sutrouterid)                  -areaid
-            #set argslist(-flagneighbordr)        -L1RouterPriority
-            set argslist(-hellointerval)                -hello_interval
-			set argslist(-deadinterval)                  -dead_interval
-			#set argslist(-polllinterval)                  -metric
-            set argslist(-retranssmitinterval)         -retransmit_interval
-            #set argslist(-transitdelay)       -FlagRestartHelper
-			#set argslist(-maxlsasperpacket)          -FlagDropSutLsp
-            set argslist(-interfacecost)     -if_cost
+            #set argslist(-sutrouterid)             -areaid
+            #set argslist(-flagneighbordr)          -L1RouterPriority
+            set argslist(-hellointerval)            -hello_interval
+			set argslist(-deadinterval)             -dead_interval
+			#set argslist(-polllinterval)           -metric
+            set argslist(-retranssmitinterval)      -retransmit_interval
+            #set argslist(-transitdelay)            -FlagRestartHelper
+			#set argslist(-maxlsasperpacket)        -FlagDropSutLsp
+            set argslist(-interfacecost)            -if_cost
 			set argslist(-routerpriority)           -priority
-            #set argslist(-mtu)        -L2RouterPriority
-			#set argslist(-flaglsadiscardmode)        -L1RouterPriority           
-            set argslist(-instanceid)              -instance_id         
-            #set argslist(-internalmessageexchanger)            -level
-			#set argslist(-active)                -AuthType
+            #set argslist(-mtu)                     -L2RouterPriority
+			#set argslist(-flaglsadiscardmode)      -L1RouterPriority           
+            set argslist(-instanceid)                -instance_id 
+            set argslist(-metric)                    -metric  			
+            #set argslist(-internalmessageexchanger)   -level
+			#set argslist(-active)                    -AuthType
 			                                 
         }
         
@@ -398,6 +515,7 @@ Deputs "----- TAG: $tag -----"
 			}
             
             RouteBlock $blockname
+            lappend blockList $blockname
             eval $blockname config -start $startingaddress \
 			    -step $modifier \
 				-prefix_len $prefixlen \
@@ -405,6 +523,36 @@ Deputs "----- TAG: $tag -----"
 			SimulatedIntraAreaRoute ${blockname}_s $objName
 			eval ${blockname}_s config -route_block $blockname
 			     
+        }
+        
+        method DeleteTopInterAreaPrefixRouteBlock { args } {
+            set tag "body Ospfv2Router::DeleteTopInterAreaPrefixRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockList [ lreplace $blockList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockList ""
+            }
         }
         
         method ConfigRouteBlock { args } {
@@ -489,6 +637,7 @@ Deputs "----- TAG: $tag -----"
 			}
             
             RouteBlock $blockname
+            lappend blockList $blockname
             eval $blockname config -start $startingaddress \
 			    -step $modifier \
 				-prefix_len $prefixlen \
@@ -500,6 +649,36 @@ Deputs "----- TAG: $tag -----"
            
             
         }
+        
+        method DeleteTopExternalRouteBlock { args } {
+            set tag "body Ospfv3Router::DeleteTopExternalRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockList [ lreplace $blockList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockList ""
+            }
+        }
 		
 		method AddTopRouterLink { args } {
             set tag "body Ospfv3Router::AddTopRouterLink [info script]"
@@ -509,14 +688,11 @@ Deputs "----- TAG: $tag -----"
             foreach { key value } $args {
                 set key [string tolower $key]
 				switch -exact -- $key {
-					-routername {
-					    set routername [::IxiaCapi::NamespaceDefine $value]
-												
-					}
 					-linkname {
 					    set linkname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
+					-routername -
 					-linkconnectedname {
 					    set linkconnectedname [::IxiaCapi::NamespaceDefine $value]
 												
@@ -528,7 +704,7 @@ Deputs "----- TAG: $tag -----"
 				}
 			}
            #SimulatedRouter $routername $this
-		   Deputs "routername:$routername"
+		   #Deputs "routername:$routername"
 		   SimulatedLink $linkname $objName
 		   eval $linkname config -metric $linkmetric -route_block $linkconnectedname
             
@@ -601,7 +777,15 @@ Deputs "----- TAG: $tag -----"
 Deputs "----- TAG: $tag -----"
             eval $objName get_detailed_stats
         }
-        destructor {}
+        destructor  {
+            set tag "body Ospfv3Router::dtor [info script]"
+Deputs "----- TAG: $tag -----"
+            if {$blockList != ""} {
+                foreach blockItem $blockList {
+                    catch { uplevel " delete object $blockItem " }
+                }
+            }
+        }
         
       
     }

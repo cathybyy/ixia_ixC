@@ -12,6 +12,10 @@
 #		3. Add capability in reborn
 # Version 1.3.4.54
 #		4. Add learned filter in reborn
+# Version 1.3.4.55
+#       5. Add uncofig 2017.7.17
+# Version 1.3.8
+#       6. Add hint arg in config
 
 class BgpSession {
     inherit RouterEmulationObject
@@ -26,7 +30,7 @@ Deputs "----- TAG: $tag -----"
 		# reborn
 	}
 
-	method reborn { { ip_version ipv4 } } {
+	method reborn { { ip_version ipv4 } { hint null } } {
 		global errNumber
 		
 		set tag "body BgpSession::reborn [info script]"
@@ -56,24 +60,30 @@ Deputs "----- TAG: $tag -----"
 		array set routeBlock [ list ]
 		
 		#-- add interface
-		set interface [ ixNet getL $hPort interface ]
-		if { [ llength $interface ] == 0 } {
-			set interface [ ixNet add $hPort interface ]
-			if { $ip_version == "ipv6" } {
-			   ixNet add $interface ipv6
-		    } else {
-			   ixNet add $interface ipv4
-			} 
-		
-			ixNet commit
-			set interface [ ixNet remapIds $interface ]
-Deputs "interface:$interface"			
-			ixNet setM $interface \
-				-enabled True
-			ixNet commit
-		} else {
-			set interface [ lindex $interface end ]
-		}
+        if { $hint == "null" } {
+            set interface [ ixNet getL $hPort interface ]
+            if { [ llength $interface ] == 0 } {
+                set interface [ ixNet add $hPort interface ]
+                if { $ip_version == "ipv6" } {
+                   ixNet add $interface ipv6
+                } else {
+                   ixNet add $interface ipv4
+                } 
+            
+                ixNet commit
+                set interface [ ixNet remapIds $interface ]
+    Deputs "interface:$interface"			
+                ixNet setM $interface \
+                    -enabled True
+                ixNet commit
+            } else {
+                set interface [ lindex $interface end ]
+            }
+        } else {
+            set interface $hint
+        }
+        
+        
 		ixNet setA $handle \
 			-interfaceType "Protocol Interface" \
 			-interfaces [ lindex $interface end ]
@@ -118,6 +128,25 @@ Deputs "interface:$interface"
 	method advertise_route { args } {}
 	method withdraw_route { args } {}
 	method wait_session_up { args } {}
+	method unconfig {} {
+	    set tag "body BgpSession::unconfig [info script]"
+		Deputs "----- TAG: $tag -----"		
+		catch {
+		    
+			set ptemp [ixNet getL $hPort/protocols/bgp neighborRange]
+			Deputs "$ptemp"
+			if {[llength $ptemp] == 1 } {
+			    set temphandle $hPort
+			    chain
+			    Deputs "disable $temphandle bgp protocol"
+				ixNet setA $temphandle/protocols/bgp -enabled false
+				ixNet commit
+			} else {
+			    chain
+			}
+		}
+						
+	}
 	
 	public variable routeBlock 
     public variable bgpType
@@ -164,17 +193,23 @@ Deputs "Args:$args "
             -hold_time_interval {
             	set hold_time_interval $value
             }
-			-update_Interval {
-            	set update_Interval $value
+			-update_interval {
+            	set update_interval $value
             }
             -ip_version {
             	set ip_version $value
+            }
+            -hint {
+                set hint $value
             }
 			-ipv4_addr {
 				set ipv4_addr $value
 			}
 			-ipv4_gw {
 				set ipv4_gw $value
+			}
+            -prefix_len {
+				set prefix_len $value
 			}
 			-type {
 			    if { $value == "IBGP" } {
@@ -199,25 +234,39 @@ Deputs "Args:$args "
 			-loopback_ipv4_gw {
 				set loopback_ipv4_gw $value
 			}
+            -flagmd5 {
+				set flagmd5 $value
+			}
+            -md5 {
+				set md5 $value
+			}
 		}
     }
 	
 	if { $handle == "" } {
-		reborn $ip_version
+        if {[info exist hint ]} {
+            reborn $ip_version $hint
+        } else {
+            reborn $ip_version
+        }
+		
 	}
 	
 	if { [ info exists ipv4_addr ] } {
 Deputs "ipv4: [ixNet getL $interface ipv4]"	
 Deputs "interface:$interface"
-		ixNet setA $interface/ipv4 -ip $ipv4_addr
+        set ipv4Inter [lindex [ixNet getL $interface ipv4] 0]
+		ixNet setA $ipv4Inter -ip $ipv4_addr
+        if { [ info exists prefix_len ] } {
+		   ixNet setA $ipv4Inter -prefixLength $prefix_len		
+	    }
 	}
 	if { [ info exists ipv4_gw ] } {
-		ixNet setA $interface/ipv4 -gateway $ipv4_gw		
+        set ipv4Inter [lindex [ixNet getL $interface ipv4] 0]
+		ixNet setA $ipv4Inter -gateway $ipv4_gw		
 	}
 	ixNet commit
-	if { [ info exists loopback_ipv4_addr ] } {
-		
-	}
+	
 	if { [ info exists type ] } {
 		ixNet setA $handle -type $type
 	}
@@ -230,12 +279,31 @@ Deputs "not implemented parameter: safi"
     if { [ info exists as ] } {
     	ixNet setA $handle -localAsNumber $as
     }
+    if { [ info exists flagmd5 ] } {
+        if { $flagmd5 } {
+        Deputs "set authentication md5"
+            ixNet setA $handle -authentication md5
+            ixNet commit
+        }    	
+    }
+    if { [ info exists md5 ] } {
+
+        ixNet setA $handle -md5Key $md5
+    }
     if { [ info exists dut_ip ] } {
 Deputs "dut_ip:$dut_ip"	
     	ixNet setA $handle -dutIpAddress $dut_ip
 		ixNet commit
-		ixNet setA $interface/ipv4 -gateway $dut_ip
-		ixNet commit
+        if { [IsIPv4Address $dut_ip] } {
+            set ipv4Inter [lindex [ixNet getL $interface ipv4] 0]
+		    ixNet setA $ipv4Inter -gateway $dut_ip
+		    ixNet commit
+        } else {
+            set ipv6Inter [lindex [ixNet getL $interface ipv6] 0]
+		    ixNet setA $ipv6Inter -gateway $dut_ip
+		    ixNet commit
+        }
+       
 
     }
     if { [ info exists dut_as ] } {
@@ -249,14 +317,22 @@ Deputs "dut_ip:$dut_ip"
     if { [ info exists hold_time_interval ] } {
 	    ixNet setA $handle  -holdTimer $hold_time_interval
     }
-	if { [ info exists update_Interval ] } {
-	    ixNet setA $handle  -updateInterval $update_Interval
+	if { [ info exists update_interval ] } {
+	    ixNet setA $handle  -updateInterval $update_interval
     }
 	if { [ info exists bgp_id ] } {
 		ixNet setA $handle -bgpId $bgp_id
 	}
 	if { [ info exists ipv6_addr ] } {
 		ixNet setA $handle -localIpAddress $ipv6_addr
+        ixNet commit
+        set ipv6Inter [lindex [ixNet getL $interface ipv6] 0]
+        ixNet setA $ipv6Inter -ip $ipv6_addr
+        ixNet commit
+        if { [ info exists prefix_len ] } {
+		    ixNet setA $ipv6Inter -prefixLength $prefix_len
+            ixNet commit
+        }
 	}
 	if { [ info exists loopback_ipv4_addr ] } {
 		Host $this.loopback $portObj
@@ -327,122 +403,139 @@ Deputs "Args:$args "
             set label_mode 		  [ $rb cget -label_mode ]
             set user_label 		  [ $rb cget -user_label ]
 			set as_path           [ $rb cget -as_path ]
-    
-			
-			set hRouteBlock [ ixNet add $handle routeRange ]
-			ixNet commit
-			set hRouteBlock [ ixNet remapIds $hRouteBlock ]
-			set routeBlock($rb,handle) $hRouteBlock
-			lappend routeBlock(obj) $rb
-			
-			ixNet setM $hRouteBlock \
-				-numRoutes $num \
-				-ipType $type \
-				-networkAddress $start \
-				-fromPrefix $prefix_len \
-				-iterationStep $step 
-			ixNet commit
             
-            if { $origin != "" } {
+            set routeBlock($rb,handle) ""
+            set hRouterBlockList ""
+            lappend routeBlock(obj) $rb
+			foreach startElement $start {
+                set hRouteBlock [ ixNet add $handle routeRange ]
+                ixNet commit
+			    set hRouteBlock [ ixNet remapIds $hRouteBlock ]
+			    lappend routeBlock($rb,handle) $hRouteBlock
                 ixNet setM $hRouteBlock \
-                    -enableOrigin True \
-                    -originProtocol $origin
-                    
-            }
+                    -numRoutes $num \
+                    -ipType $type \
+                    -networkAddress $startElement \
+                    -fromPrefix $prefix_len \
+                    -iterationStep $step 
+			    ixNet commit
+            			
             
-            if { $nexthop != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableNextHop True \
-					-nextHopSetMode setManually \
-                    -nextHopIpType ipv4 \
-                    -nextHopIpAddress $nexthop
-                    
-            }
-            
-            if { $med != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableMed True \
-                    -med $med
-                    
-            }
-			
-			if { $as_path != "" } {
-			   set aspathCmd ""
-			    foreach asPathEle $as_path {
-				    set astype [lindex $asPathEle 0 ]
-					switch $astype {
-					    1 { set as_type "asSet"}
-						2 { set as_type "asSequence"}
-						3 { set as_type "asConfedSequence"}
-						4 { set as_type "asConfedSet"}
+                if { $origin != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableOrigin True \
+                        -originProtocol [string tolower $origin]
+                        
+                }
+                
+                if { $nexthop != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableNextHop True \
+                        -nextHopSetMode setManually \
+                        -nextHopIpType $type \
+                        -nextHopIpAddress $nexthop
+                        
+                }
+                
+                if { $med != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableMed True \
+                        -med $med
+                        
+                }
+                
+                if { $as_path != "" } {
+                   set aspathCmd ""
+                    foreach asPathEle $as_path {
+                        set astype [lindex $asPathEle 0 ]
+                        switch $astype {
+                            1 { set as_type "asSet"}
+                            2 { set as_type "asSequence"}
+                            3 { set as_type "asConfedSequence"}
+                            4 { set as_type "asConfedSet"}
+                        }
+                        set newEle [lreplace $asPathEle 0 0]
+                        
+                        lappend aspathCmd [list true $as_type $newEle]
+                                            
                     }
-					set newEle [lreplace $asPathEle 0 0]
-					
-					lappend aspathCmd [list true $as_type $newEle]
+                    
+                    ixNet setM $hRouteBlock \
+					    -enableAsPath true \
+						-asPathSetMode noInclude
+					ixNet commit
+                    
+                    ixNet setM $hRouteBlock/asSegment \
+                        -asSegments $aspathCmd
+                        
+                }
+                
+                if { $local_pref != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableLocalPref True \
+                        -localPref $local_pref
+                        
+                }
+                
+                if { $cluster_list != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableCluster True 
+                    set decnum ""
+                    foreach clusterElement  $cluster_list {
+                        if { [IsIPv4Address $clusterElement] } { 
+                            set hexnum [IP2Hex $clusterElement] 	
+                            lappend decnum [Hex2Int $hexnum]
+                        }
+                    }
+                       
+                    ixNet setMultiAttrs $hRouteBlock/cluster \
+                        -val $decnum
                     					
-				}
-				
-				
-                ixNet setM $hRouteBlock/asSegment \
-                    -asSegments $aspathCmd
-                    
-            }
-            
-            if { $local_pref != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableLocalPref True \
-                    -localPref $local_pref
-                    
-            }
-            
-            if { $cluster_list != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableCluster True 
-                if { [IsIPv4Address $cluster_list] } { 
-                    set hexnum [IP2Hex $cluster_list] 	
-                    set decnum [Hex2Int $hexnum]					
-                ixNet setMultiAttrs $hRouteBlock/cluster \
-                    -val $decnum
-                }					
-            }
-            
-            if { $flag_atomic_agg != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableAtomicAttribute True 
-                if { $agg_as != "" } {
+                }
+                
+                if { $flag_atomic_agg != "" } {
                     ixNet setM $hRouteBlock \
-                        -aggregatorAsNum  $agg_as
-                } 
-                if { $agg_ip != "" } {
+                        -enableAtomicAttribute True 
+                    if { $agg_as != "" } {
+                        ixNet setM $hRouteBlock \
+                            -aggregatorAsNum  $agg_as
+                    } 
+                    if { $agg_ip != "" } {
+                        ixNet setM $hRouteBlock \
+                            -aggregatorIpAddress  $agg_ip
+                    }                
+                        
+                }
+                
+                if { $originator_id != "" } {
                     ixNet setM $hRouteBlock \
-                        -aggregatorIpAddress  $agg_ip
-                }                
-                    
-            }
-            
-            if { $originator_id != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableOriginatorId True \
-                    -originatorId $originator_id
-                    
-            }
-            
-            if { $communities != "" } {
-                ixNet setM $hRouteBlock \
-                    -enableCommunity True 
-                ixNet setMultiAttrs $hRouteBlock/community \
-                     -val $communities
-                    
-            }
-            
-            if { $bgpType == "internal" } {
-               ixNet setM $hRouteBlock \
-                  -asPathSetMode noInclude
-            }
-            
-            ixNet commit
-			
-			$rb configure -handle $hRouteBlock
+                        -enableOriginatorId True \
+                        -originatorId $originator_id
+                        
+                }
+                
+                if { $communities != "" } {
+                    ixNet setM $hRouteBlock \
+                        -enableCommunity True 
+                    set hexcommunity ""
+                    foreach element [split $communities : ] {
+                        set hexcommunity $hexcommunity[Int2Hex $element 4]
+                    }
+                    set communities [Hex2Int $hexcommunity]
+                    ixNet setMultiAttrs $hRouteBlock/community \
+                         -val $communities
+                        
+                }
+                
+                if { $bgpType == "internal" } {
+                   ixNet setM $hRouteBlock \
+                      -asPathSetMode noInclude
+                }
+                
+                ixNet commit
+                lappend hRouterBlockList $hRouteBlock
+			}
+			$rb configure -handle $hRouterBlockList
 			$rb configure -portObj $portObj
 			$rb configure -hPort $hPort
 			$rb configure -protocol "bgp"
@@ -473,12 +566,20 @@ Deputs "Args:$args "
     }
 	
 	if { [ info exists route_block ] } {
-		ixNet setA $routeBlock($route_block,handle) \
-			-enabled True
+        foreach routerblockhandle $routeBlock($route_block,handle) {
+		    ixNet setA $routerblockhandle \
+			    -enabled True
+            ixNet commit
+        }
 	} else {
 		foreach hRouteBlock $routeBlock(obj) {
-Deputs "hRouteBlock : $hRouteBlock"		
-			ixNet setA $routeBlock($hRouteBlock,handle) -enabled True
+Deputs "hRouteBlock : $hRouteBlock"	
+            foreach routerblockhandle $routeBlock($hRouteBlock,handle) {
+                ixNet setA $routerblockhandle \
+                    -enabled True
+                ixNet commit
+            }	
+			
 		}
 	}
 	ixNet commit
@@ -503,12 +604,22 @@ Deputs "Args:$args "
         }
     }
 	
-	if { [ info exists route_block ] } {
-		ixNet setA $routeBlock($route_block,handle) \
-			-enabled False
+	
+    if { [ info exists route_block ] } {
+        foreach routerblockhandle $routeBlock($route_block,handle) {
+		    ixNet setA $routerblockhandle \
+			    -enabled False
+            ixNet commit
+        }
 	} else {
 		foreach hRouteBlock $routeBlock(obj) {
-			ixNet setA $routeBlock($hRouteBlock,handle) -enabled False
+Deputs "hRouteBlock : $hRouteBlock"	
+            foreach routerblockhandle $routeBlock($hRouteBlock,handle) {
+                ixNet setA $routerblockhandle \
+                    -enabled False
+                ixNet commit
+            }	
+			
 		}
 	}
 	ixNet commit

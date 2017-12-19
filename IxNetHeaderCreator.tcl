@@ -6,6 +6,7 @@
 # Change made
 # Version 1.1
 
+
 namespace eval IxiaCapi {
     class HeaderCreator {
         constructor { } {
@@ -195,6 +196,7 @@ Deputs "----- TAG: $tag -----"
 Deputs "name:$name"
                     }
                 }
+                -customheader -
                 -pattern -
                 -hexstring {
                    set pattern $value
@@ -232,7 +234,9 @@ Deputs "Pro: $pro"
 			if { [ regexp -nocase {(0x)?([a-f0-9]+)} $pattern match x hex ] == 0 } {
                         unset hex                    
 					} 
-			set pduLen [expr [string length $pattern] * 4]
+      
+			set pduLen [expr [string length $hex] * 4]
+        Deputs "hex:$hex, len: $pduLen"
 			$pdu AddField length
 			$pdu AddFieldMode Fixed
 			$pdu AddFieldConfig $pduLen

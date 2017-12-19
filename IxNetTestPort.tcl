@@ -6,10 +6,17 @@
 # Change made
 # Version 1.1
 # Version 1.2
+# Version 1.3
+# Version 1.4
+#    1.delete clearownership command for some cards  2017.7.12
+# Version 1.5
+#    2.add username to control clearownership
+
 
 namespace eval IxiaCapi {
     class TestPort {
         constructor {{chassis 0}  { moduleNo 0 } { portNo 0 } { porthandle 0 }  } { }
+        method StartTraffic_old {  args  } {}
         method StartTraffic {  args  } {}
         method StopTraffic {  args  } {}
         method StartStaEngine { args } {}
@@ -65,7 +72,10 @@ namespace eval IxiaCapi {
             }
 #Deputs "findPort:$findPort"
             if { $findPort } {
-			    ixNet exec clearOwnership $chassis/card:$card/port:$port
+                set owner [ixNet getA $chassis/card:$card/port:$port -owner]
+                if {$owner != "" && $owner != $username } {
+			        ixNet exec clearOwnership $chassis/card:$card/port:$port
+                }
                 return $chassis/card:$card/port:$port
             } else {
                 return [ixNet getNull]
@@ -93,12 +103,13 @@ namespace eval IxiaCapi {
         public variable hPort
         public variable ospfRouterIdList
         public variable handle
-	public variable m_staEngineList
-	public variable m_trafficNameList
-	public variable m_filterNameList
-        #public variable hostargs
-        
+	    public variable m_staEngineList
+	    public variable m_trafficNameList
+	    public variable m_filterNameList  
+        public variable username  
+        public variable flowflag        
         private variable MTU
+        
         
         method Reset {} {
             global errorInfo
@@ -169,6 +180,9 @@ Deputs "port handle to reset: $hPort"
         method StaExist {} {
             return [ info exists StaEngine ]
         }
+        method SetRouterList { routerItem } {
+            lappend RouterList $routerItem
+        }
     }
     
 
@@ -228,6 +242,7 @@ Deputs "----- TAG: $tag -----"
         method ListArp {} {
             puts $ArpList
         }
+        
     }
     
 
@@ -276,9 +291,11 @@ Deputs "----- TAG: $tag -----"
         set ArpList     [ list ]
         set ospfRouterIdList    [ list ]
         set HostLevel 2
+        set flowflag 0
         set start [ clock seconds ]
         set root    [ixNet getRoot]
         set vport   [ixNet add $root vport]
+        set username [ixNet getA ::ixNet::OBJ-/globals -username]
         if { $gOffline == 0 } {
             set realPort    [ GetRealPort $chassis $ModuleNo $PortNo ]
     Deputs "Real Port:$realPort"
@@ -488,6 +505,9 @@ Deputs "----- TAG: $tag -----"
                     set trafficName [::IxiaCapi::NamespaceDefine $value]
                     #set trafficName $value
                 }
+                -flowflag {
+                    set flowflag $value
+                }
                 default {
                     IxiaCapi::Logger::LogIn -type err -message \
                     "$IxiaCapi::s_common1 $key\n\t\
@@ -524,6 +544,10 @@ Deputs "Traffic exist: $Traffic"
 			uplevel 1 " eval $command " 
 			set command "$trafficName SetPortObj $this "
 			uplevel 1 " eval $command "
+            
+            if { $flowflag == 1} {
+                uplevel 1 " eval $trafficName SetFlowFlag 1 "
+            }
             set Traffic $trafficName
 	    set m_trafficNameList $trafficName
 Deputs "Traffic:$trafficName"
@@ -615,6 +639,281 @@ Deputs "args: $args"
         return $IxiaCapi::errorcode(0)
     }
     
+    body TestPort::StartTraffic_old { args } {
+        
+        global errorInfo
+        
+        global IxiaCapi::PortManager IxiaCapi::TrafficManager
+        
+        set tag "body TestPort::StartTraffic [info script]"
+Deputs "----- TAG: $tag -----"
+        set clearStats 0
+# Param collection --        
+        foreach { key value } $args {
+            set key [string tolower $key]
+            switch -exact -- $key {
+                -stream -
+                -streams -
+                -streamnamelist -
+				-streamname -
+                -streamlist {
+                    set streamList [::IxiaCapi::NamespaceDefine $value]
+                    #set streamList $value
+                }
+                -profile -
+                -profiles -
+                -profilelist {
+                    #set profileList $value
+                    set profileList [::IxiaCapi::NamespaceDefine $value]
+                }
+				-clearstatistics -
+                -clearstatistic {
+                    set trans [ IxiaCapi::Regexer::BoolTrans $value ]
+                    if { $trans == 1 || $trans == 0 } {
+                        set clearStats $trans
+                    } else {
+                        IxiaCapi::Logger::LogIn -type warn -message \
+                        "$IxiaCapi::s_TestPortStartTraffic10" -tag $tag
+                    }
+                }
+                default {
+                    IxiaCapi::Logger::LogIn -type err -message \
+                    "$IxiaCapi::s_common1 $key\n\t\
+                    $IxiaCapi::s_common4 -StreamList\t-ProfileList" -tag $tag
+                    return $IxiaCapi::errorcode(1)
+                }
+            }
+        }
+			
+	
+# Check the existence of TrafficEngine
+        set exist 1
+        if { [ info exists Traffic ] == 0 } {
+            set exist 0
+        }
+        if { $exist == 0 } {
+            IxiaCapi::Logger::LogIn -type err \
+            -message "$IxiaCapi::s_TestPortStartTraffic4"
+            return $IxiaCapi::errorcode(4)
+        }
+        if { [ info exists streamList ] && [ info exists profileList ] } {
+            IxiaCapi::Logger::LogIn -type err \
+            -message "$IxiaCapi::s_TestPortStartTraffic8"
+            return $IxiaCapi::errorcode(2)
+        }
+		set restartCapture 0
+		set restartCaptureJudgement 0
+		set root [ixNet getRoot]
+		set portList [ ixNet getL $root vport ]
+		
+        set captureHandle ""
+		foreach hp $portList  {
+			#set cstate [ixNet getA $hp/capture -isDataCaptureRunning]
+			set cstate [ixNet getA $hp/capture -isCaptureRunning]
+			
+			if { $cstate == "true" } {
+                lappend captureHandle $hp
+				set restartCapture 1
+				#break
+			}
+		}
+		
+		
+		
+		set flowList ""
+# Check streams, which should stop the traffic engine.
+        if { [ info exists streamList ] } {
+    # To find how many profiles does stream list have
+            # foreach stream  [ IxiaCapi::TrafficManager GetStreamHandleList ] {
+# Deputs "disable stream $stream"
+                # ixNet setA $stream -suspend True
+            # }
+            foreach stream $streamList {
+                if { [ catch {
+                    set stream [ IxiaCapi::Regexer::GetObject $stream ]
+                    set strObj [ uplevel 1 " $stream cget -hStream " ]
+					set trafficObj [ uplevel 1 " $stream cget -hTrafficItem " ]
+                   
+                    if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
+					  
+					   if { $restartCapture } {
+							catch { 
+								Deputs "stop capture..."
+								ixNet exec stopCapture
+								after 1000				
+								ixNet exec closeAllTabs		
+                                set restartCaptureJudgement 1								
+								
+							}
+						} 
+                        ixNet exec generate $trafficObj
+					    Tester::apply_traffic
+					} elseif { [ixNet getA ::ixNet::OBJ-/traffic -state] == "stopped" } {
+                        if { $restartCapture } {
+                            catch { 
+                                Deputs "stop capture..."
+                                ixNet exec stopCapture
+                                after 1000				
+                                ixNet exec closeAllTabs		
+                                set restartCaptureJudgement 1								
+                                
+                            }
+                        }
+               Deputs "apply traffic..."                    
+                        ixNet exec apply ::ixNet::OBJ-/traffic
+                        after 1000
+                    } 
+					lappend flowList $trafficObj
+					
+                    #ixNet setA $strObj -suspend False
+                    # identify the stream
+                } ] } {
+                    IxiaCapi::Logger::LogIn -type warn \
+                    -message "$IxiaCapi::s_TestPortStartTraffic6 $stream" -tag $tag
+                    continue
+                }
+            }
+        }
+# Check profile, which should exist
+        if { [ info exists profileList ] } {
+            set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
+            set streamList [ $traObj GetStreamList ]
+            foreach profile $profileList {
+                foreach stream $streamList {
+                    set streamObj [ IxiaCapi::Regexer::GetObject $stream ]
+                    set ProfileName [ $streamObj cget -ProfileName ]
+                    if { $ProfileName == $profile } {
+                        #ixNet setA $strObj -suspend False
+						set strObj [ uplevel 1 " $streamObj cget -hStream " ]
+						set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
+	                  
+						if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
+						 
+						    if { $restartCapture } {
+								catch { 
+									Deputs "stop capture..."
+									ixNet exec stopCapture
+									after 1000				
+									ixNet exec closeAllTabs		
+									set restartCaptureJudgement 1								
+									
+								}
+							}
+                            ixNet exec generate $trafficObj
+						    Tester::apply_traffic                            
+						}
+						lappend flowList $trafficObj
+                    }
+                }
+            }
+        }
+# Start all stream --
+        if { ( [ info exists streamList ] == 0 ) && ( [ info exists profileList ] == 0 ) } {
+            # foreach stream  [ IxiaCapi::TrafficManager GetStreamHandleList ] {
+# Deputs "enable stream $stream"
+                # ixNet setA $stream -suspend False
+            # }
+			
+			set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
+			Deputs "traObj::$traObj"
+            set streamList [ $traObj GetStreamList ]
+			Deputs "streamList:$streamList"
+			foreach stream $streamList {
+				set streamObj [ IxiaCapi::Regexer::GetObject $stream ]
+				
+				#ixNet setA $strObj -suspend False
+				set strObj [ uplevel 1 " $streamObj cget -hStream " ]
+				set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
+				Deputs "strObj::$strObj"
+				Deputs "trafficObj::$trafficObj"
+           
+				if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
+				   
+				   if { $restartCapture } {
+						catch { 
+							Deputs "stop capture..."
+							ixNet exec stopCapture
+							after 1000				
+							ixNet exec closeAllTabs		
+							set restartCaptureJudgement 1								
+							
+						}
+					} 
+                    Deputs "unapplied traffic apply traffic..."  
+                    ixNet exec generate $trafficObj
+				    Tester::apply_traffic
+				} elseif { [ixNet getA ::ixNet::OBJ-/traffic -state] == "stopped" } {
+                    if { $restartCapture } {
+						catch { 
+							Deputs "stop capture..."
+							ixNet exec stopCapture
+							after 1000				
+							ixNet exec closeAllTabs		
+							set restartCaptureJudgement 1								
+							
+						}
+					}
+           Deputs "apply traffic..." 
+                    # ixNet exec generate $trafficObj
+				    # Tester::apply_traffic           
+                    ixNet exec apply ::ixNet::OBJ-/traffic
+                    after 1000
+                }
+				lappend flowList $trafficObj
+				
+			}
+			
+        }
+        
+		#ixNet commit
+        if { [ info exists clearStats ] } {
+            if { $clearStats  && [ixNet getA ::ixNet::OBJ-/traffic -state] == "stopped" } {
+                ixNet exec clearStats
+            }
+        }
+		
+		if { $restartCaptureJudgement } {
+			catch { 
+				
+				Deputs "start capture..."
+				#ixNet exec startCapture
+                foreach hCapture $captureHandle {
+                    ixNet exec start $hCapture/capture
+                }
+				after 2000
+			}
+		}
+Deputs "flowList: $flowList"	
+        if {$flowList != "" } {
+		    ixNet exec startStatelessTraffic $flowList
+		}
+		set timeout 30
+		set stopflag 0
+		while { 1 } {
+		if { !$timeout } {
+			break
+		}
+		set state [ ixNet getA $root/traffic -state ] 
+		if { $state != "started" } {
+	Deputs "start state:$state"
+			if { [string match startedWaiting* $state ] } {
+				set stopflag 1
+			} elseif {[string match stopped* $state ] && ($stopflag == 1)} {
+				break	
+			}	
+			after 1000		
+		} else {
+	Deputs "start state:$state"
+			break
+		}
+		incr timeout -1
+	Deputs "start timeout:$timeout state:$state"
+		}
+
+        return $IxiaCapi::errorcode(0)
+    }
+    
+    
     body TestPort::StartTraffic { args } {
         
         global errorInfo
@@ -681,63 +980,56 @@ Deputs "----- TAG: $tag -----"
 		set restartCaptureJudgement 0
 		set root [ixNet getRoot]
 		set portList [ ixNet getL $root vport ]
-		# foreach hport $portList {
-			# if { [ ixNet getA $hport/capture    -hardwareEnabled  ] } {
-				# set restartCapture 1
-				# break
-			# }
-		# }
+		
+        set captureHandle ""
 		foreach hp $portList  {
 			#set cstate [ixNet getA $hp/capture -isDataCaptureRunning]
 			set cstate [ixNet getA $hp/capture -isCaptureRunning]
 			
 			if { $cstate == "true" } {
+                lappend captureHandle $hp
 				set restartCapture 1
-				break
+				#break
 			}
 		}
 		
 		
 		
-		set flowList ""
+		set flowList "" 
+        set generateList ""        
 # Check streams, which should stop the traffic engine.
         if { [ info exists streamList ] } {
-    # To find how many profiles does stream list have
-            # foreach stream  [ IxiaCapi::TrafficManager GetStreamHandleList ] {
-# Deputs "disable stream $stream"
-                # ixNet setA $stream -suspend True
-            # }
-            foreach stream $streamList {
+
+            foreach stream $streamList {                                
                 if { [ catch {
                     set stream [ IxiaCapi::Regexer::GetObject $stream ]
                     set strObj [ uplevel 1 " $stream cget -hStream " ]
-					set trafficObj [ uplevel 1 " $stream cget -hTrafficItem " ]
-                   
-                    if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
-					   ixNet exec generate $trafficObj
-					   Tester::apply_traffic
-					   if { $restartCapture } {
-							catch { 
-								Deputs "stop capture..."
-								ixNet exec stopCapture
-								after 1000				
-								ixNet exec closeAllTabs		
-                                set restartCaptureJudgement 1								
-								
-							}
-						} 
-					}
-					lappend flowList $trafficObj
+					set trafficObj [ uplevel 1 " $stream cget -hTrafficItem " ] 
+                    if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
+                        set flowObj [ uplevel 1 " $stream cget -hFlow " ]
+                        lappend flowList $flowObj
+                        Deputs "flowList: $flowList"
+                        if { [lsearch -exact $generateList $trafficObj ] < 0 } {
+                            lappend generateList $trafficObj
+                        }
+                        Deputs "generateList: $generateList"
+                    } else {
+                        lappend flowList $trafficObj
+                        lappend generateList $trafficObj
+                    }                  
 					
-                    #ixNet setA $strObj -suspend False
-                    # identify the stream
+                    
+					
                 } ] } {
                     IxiaCapi::Logger::LogIn -type warn \
                     -message "$IxiaCapi::s_TestPortStartTraffic6 $stream" -tag $tag
                     continue
                 }
             }
-        }
+                
+		}			
+					
+       
 # Check profile, which should exist
         if { [ info exists profileList ] } {
             set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
@@ -751,32 +1043,26 @@ Deputs "----- TAG: $tag -----"
 						set strObj [ uplevel 1 " $streamObj cget -hStream " ]
 						set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
 	                  
-						if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
-						   ixNet exec generate $trafficObj
-						   Tester::apply_traffic
-						   if { $restartCapture } {
-								catch { 
-									Deputs "stop capture..."
-									ixNet exec stopCapture
-									after 1000				
-									ixNet exec closeAllTabs		
-									set restartCaptureJudgement 1								
-									
-								}
-							} 
-						}
-						lappend flowList $trafficObj
+						
+                        if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
+                            set flowObj [ uplevel 1 " $stream cget -hFlow " ]
+                            lappend flowList $flowObj
+                            Deputs "flowList: $flowList"
+                            if { [lsearch -exact $generateList $trafficObj ] < 0 } {
+                                lappend generateList $trafficObj
+                            }
+                            Deputs "generateList: $generateList"
+                        } else {
+                            lappend flowList $trafficObj
+                            lappend generateList $trafficObj
+                        } 
                     }
                 }
             }
         }
 # Start all stream --
         if { ( [ info exists streamList ] == 0 ) && ( [ info exists profileList ] == 0 ) } {
-            # foreach stream  [ IxiaCapi::TrafficManager GetStreamHandleList ] {
-# Deputs "enable stream $stream"
-                # ixNet setA $stream -suspend False
-            # }
-			
+           
 			set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
 			Deputs "traObj::$traObj"
             set streamList [ $traObj GetStreamList ]
@@ -789,30 +1075,69 @@ Deputs "----- TAG: $tag -----"
 				set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
 				Deputs "strObj::$strObj"
 				Deputs "trafficObj::$trafficObj"
-           
-				if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
-				   ixNet exec generate $trafficObj
-				   Tester::apply_traffic
-				   if { $restartCapture } {
-						catch { 
-							Deputs "stop capture..."
-							ixNet exec stopCapture
-							after 1000				
-							ixNet exec closeAllTabs		
-							set restartCaptureJudgement 1								
-							
-						}
-					} 
-				}
 				lappend flowList $trafficObj
+                lappend generateList $trafficObj
 				
 			}
 			
         }
         
+        set trafficState [ixNet getA ::ixNet::OBJ-/traffic -state]
+        if {$trafficState == "unapplied"  || $trafficState == "stopped" } {
+              
+           if { $restartCapture } {
+                catch { 
+                    Deputs "stop capture..."
+                    ixNet exec stopCapture
+                    after 1000				
+                    ixNet exec closeAllTabs		
+                    set restartCaptureJudgement 1								
+                    
+                }
+            } 
+            set nameList ""
+            set totalList ""
+            set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
+			Deputs "traObj::$traObj"
+            set totalstreamList [ $traObj GetStreamList ]
+			
+			foreach stream $totalstreamList {				
+                
+                set stream [ IxiaCapi::Regexer::GetObject $stream ]
+                set strObj [ uplevel 1 " $stream cget -hStream " ]
+                set trafficObj [ uplevel 1 " $stream cget -hTrafficItem " ] 
+                if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
+                    set flowObj [ uplevel 1 " $stream cget -hFlow " ]
+                    lappend totalList $flowObj
+                  
+                   
+                } else {
+                    lappend totalList $trafficObj
+                }     
+              
+				
+			}
+            foreach   trafficObj  $totalList {
+                lappend nameList [ixNet getA $trafficObj -name ]
+            }
+            foreach   trafficObj  $generateList {
+                ixNet exec generate $trafficObj
+                after 1000
+            } 
+            
+            foreach trafficObj  $totalList rgname $nameList  {
+                  ixNet setA $trafficObj -name  $rgname
+                  ixNet commit
+            }         
+            
+            ixNet exec apply ::ixNet::OBJ-/traffic                    
+            after 1000    
+              
+        } 
+        
 		#ixNet commit
         if { [ info exists clearStats ] } {
-            if { $clearStats } {
+            if { $clearStats  && $trafficState == "stopped" } {
                 ixNet exec clearStats
             }
         }
@@ -821,7 +1146,10 @@ Deputs "----- TAG: $tag -----"
 			catch { 
 				
 				Deputs "start capture..."
-				ixNet exec startCapture
+				#ixNet exec startCapture
+                foreach hCapture $captureHandle {
+                    ixNet exec start $hCapture/capture
+                }
 				after 2000
 			}
 		}
@@ -929,10 +1257,15 @@ Deputs "----- TAG: $tag -----"
                     set strObj [ uplevel 1 " $stream cget -hStream " ]
 					set trafficObj [ uplevel 1 " $stream cget -hTrafficItem " ]
 
-                    # if {[ ixNet getA $trafficObj -state ] == "unapplied" } {
-					   # Tester::apply_traffic
-					# }
-					lappend flowList $trafficObj
+                    if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
+                        set flowObj [ uplevel 1 " $stream cget -hFlow " ]
+                        lappend flowList $flowObj
+                       
+                    } else {
+                        lappend flowList $trafficObj
+                      
+                    }
+				
 					
                     #ixNet setA $strObj -suspend False
                     # identify the stream
@@ -959,7 +1292,15 @@ Deputs "----- TAG: $tag -----"
 						set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
 	#Deputs "enable stream $strObj"
 						
-						lappend flowList $trafficObj
+						if { [ uplevel 1 " $stream cget -flowflag "] == 1 } {
+                            set flowObj [ uplevel 1 " $stream cget -hFlow " ]
+                            lappend flowList $flowObj
+                           
+                        } else {
+                            lappend flowList $trafficObj
+                          
+                        }
+				
                     }
                 }
             }
@@ -1044,7 +1385,11 @@ Deputs "----- TAG: $tag -----"
                 }
 				-mode  {
                    set mode $value
+				   set cflag 1
                 }
+				-wiresharkpath {
+				    set wiresharkpath $value
+				}
                 default {
                     IxiaCapi::Logger::LogIn -type err -message \
                     "$IxiaCapi::s_common1 $key\n\t\
@@ -1103,6 +1448,8 @@ Deputs "----- TAG: $tag -----"
                 if { $type == "ANALYSIS" } {
 					set command "IxiaCapi::TestAnalysis $name $hPort $mode"
 					set AnaEngine $name
+				
+					
 				} else {
 					set command "IxiaCapi::TestStatistic $name $hPort "
 					set StaEngine $name
@@ -1111,6 +1458,18 @@ Deputs "----- TAG: $tag -----"
 				#namespace inscope $IxiaCapi::ObjectNamespace $command
 				uplevel 1 " eval $command "
 				uplevel 1 " eval $name SetPortName $this "
+                
+                if { $flowflag == 1} {
+                    uplevel 1 " eval $name SetFlowFlag 1 "
+                }
+				
+				if { [info exists wiresharkpath]} {
+				   uplevel 1 "eval $name SetWiresharkPath $wiresharkpath "
+				}
+				
+				if {[info exists cflag]} {
+					uplevel 1 " eval $name SetControlFlag $cflag "
+				}
                
             } else {
 			    if { $type == "ANALYSIS" } {
@@ -1623,6 +1982,7 @@ Deputs "routerId: $routerId"
                 PPPOESERVER -
 				PPPOEV6SERVER -
 				MLDHOST -
+                MLDROUTER -
 				PPPOEV4V6SERVER {
 					set hostname ${this}_${tempname}_host
            
@@ -1642,12 +2002,7 @@ Deputs "routerId: $routerId"
         }
 		
 		
-# Check pre-condition
-        #if { ( [ AgtInvoke AgtRoutingEngine GetState ] == "AGT_ROUTING_RUNNING" ) } {
-        #    IxiaCapi::Logger::LogIn -type err -message \
-        #    "$IxiaCapi::s_common6" -tag $tag
-        #    return $IxiaCapi::errorcode(8)
-        #}
+
 # Check whether this is a port sub-interface
 Deputs "Check sub-interface flag...$this"
         set flagSubInt  [ $this isa IxiaCapi::VlanSubInt ]
@@ -1703,6 +2058,11 @@ Deputs "Read Vlan info error: $err"
                 
             }
             MLDROUTER {
+                if { [info exists hostname] } {
+				   uplevel "MLDRouter $name $this $hostname "
+				} else {
+				   uplevel "MLDRouter $name $this "
+				}
             }
 			MLDHOST {
 			    if { [info exists hostname] } {
@@ -1887,13 +2247,7 @@ Deputs "Read Vlan info error: $err"
             "$errorInfo" -tag $tag
             return $IxiaCapi::errorcode(7)
         }
-        # if { [ catch {
-            # set sessionHandle [ uplevel "$name cget -hSession" ]
-# Deputs "Set name...$sessionHandle"
-            # AgtInvoke AgtTestTopology SetSessionName $sessionHandle $name
-        # } ] } {
-# Deputs $errorInfo
-        # }
+        
         if { [ info exists routerId ] } {
 Deputs "RouterId:$routerId"
             switch $type {
@@ -1958,12 +2312,12 @@ Deputs "----- TAG: $tag -----"
                 }
             }
         }
-# Check pre-condition
-        #if { ( [ AgtInvoke AgtRoutingEngine GetState ] == "AGT_ROUTING_RUNNING" ) } {
-        #    IxiaCapi::Logger::LogIn -type err -message \
-        #    "$IxiaCapi::s_common6" -tag $tag
-        #    return $IxiaCapi::errorcode(8)
-        #}
+		
+		catch {
+		    ixNet exec stopAllProtocols
+			after 3000
+		}
+
 # Make sure the existence of the Name
     # If positive delete the certain filter
         if { [ catch {
@@ -1985,9 +2339,9 @@ Deputs "objects:[find objects]"
                     if { [ catch { uplevel " delete object $name " } ] } {
 Deputs $errorInfo
                     } else {
-                        if { [ catch { uplevel " delete object ${name}_c " } ] } {
+                        if { [ catch { uplevel " ${name}_c unconfig" } ] } {
 Deputs $errorInfo
-                    }
+                    } else { catch { uplevel " delete object ${name}_c " } }
                         
                     }
                 }
@@ -2000,9 +2354,11 @@ Deputs "objects:[find objects]"
                     if { [ catch { uplevel " delete object $router " } ] } {
 Deputs $errorInfo
                     } else {
-                         if { [ catch { uplevel " delete object ${router}_c " } ] } {
+                         if { [ catch { uplevel " ${name}_c unconfig" } ] } {
 Deputs $errorInfo
-                    }
+                        } else {
+                            catch { uplevel " delete object ${router}_c " }
+                        }
                     }
                 }
                 set RouterList  [ list ]
@@ -2364,10 +2720,10 @@ Deputs "args: $args"
             if { [ info exists autoNeg ] } {
 
                 if { $autoNeg } {
-                    ixNet setA $hPort/l1Config/ethernet \
+                    ixNet setA $hPort/l1Config/[ixNet getA $hPort -type] \
                         -autoNegotiate True
                 } else {
-                    ixNet setA $hPort/l1Config/ethernet \
+                    ixNet setA $hPort/l1Config/[ixNet getA $hPort -type] \
                         -autoNegotiate False
                 }
             }
@@ -2403,7 +2759,7 @@ Deputs "args: $args"
             return $IxiaCapi::errorcode(7)
         } 
         if { [ catch {
-            if { [ info exists autoNeg ] } {
+            if { [ info exists autoNeg ] && $autoNeg == 1 } {
                 ixNet setA $hPort/l1Config/ethernet -speed auto
             } elseif { [ info exists linkSpeed ] } { 
             
@@ -2420,14 +2776,20 @@ Deputs "args: $args"
                             } else {
                                 regexp {\d+([fh]d)} $speed match duplex
                             }
-                            ixNet setA $hPort/l1Config/ethernet -speed speed$linSpeed$duplex
+                            ixNet setA $hPort/l1Config/ethernet -speed speed$linkSpeed$duplex
                         }
+                        ixNet commit
                 
                         if { [ info exists duplexMode ] } {
-                            set speed [ ixNet getA $hPort/l1Config/ethernet -speed ]
+                            switch $duplexMode {
+                                full { set duplex fd }
+                                half { set duplex hd }
+                            }
+                            set speed [ ixNet getA $handle/l1Config/ethernet -speed ]
                             if { [ regexp {(\d+)([fh]d)} $speed match speed duplex ] } {
                                 ixNet setA $hPort/l1Config/ethernet -speed speed$speed$duplex
                             }
+                            ixNet commit
                         }
                     }
                     tenGigLan {                        
@@ -2963,106 +3325,10 @@ Deputs "$errorInfo"
     body VlanSubInt::CreateHost { args } {
          
         global errorInfo
+
         set tag "body VlanSubInt::CreateHost [info script]"
 Deputs "----- TAG: $tag -----"
-# Param collection --        
-        foreach { key value } $args {
-            set key [string tolower $key]
-            switch -exact -- $key {
-                -name -
-                -hostname {
-				    set name [::IxiaCapi::NamespaceDefine $value]
-					set HostName $name
-                    #set name $value
-                }
-            }
-        }
-# Check the existence of name
-Deputs Step10
-        set HostLevel 3
-        set SubHost 1
-        set chainResult [ eval { chain } $args ]
-        if { $chainResult > 0 } {
-            return $chainResult
-        }
-        set SubHost 0
-Deputs Step20
-        if { [ info exists name ] == 0 } {
-                    return $IxiaCapi::errorcode(3)
-        }
-        if { [ lsearch -exact $HostList $name ] < 0 } {
-                    return $IxiaCapi::errorcode(4)
-        }
-# Enable Vlan
-        if { [ catch {
-Deputs Step30
-Deputs [ find object ]
-            set interface [ uplevel " $name cget -interface " ]
-            if { [ info exists QinQList ] } {
-Deputs Step40
-                set tpidlist ""
-                set vlanidlist ""
-                set priorlist ""
-                foreach QinQ $QinQList {
-Deputs $QinQ
-                    foreach { tpid vlanid prior } $QinQ {
-Deputs "$tpid $vlanid $prior"
-                        set tpidlist $tpidlist${tpid},
-                        set vlanidlist $vlanidlist${vlanid},
-                        set priorlist $priorlist${prior},
-                    }
-                }
-                if { [ string length $tpidlist ] >= 2 } {
-                    set tpidlist [ string range $tpidlist 0 [expr [string length $tpidlist] - 2] ]
-                }
-                if { [ string length $vlanidlist ] >= 2 } {
-                    set vlanidlist [ string range $vlanidlist 0 [expr [string length $vlanidlist] - 2] ]
-                }
-                if { [ string length $priorlist ] >= 2 } {
-                    set priorlist [ string range $priorlist 0 [expr [string length $priorlist] - 2] ]
-                }
-Deputs "tpidlist:$tpidlist vlanidlist:$vlanidlist priorlist:$priorlist"
-                ixNet setMultiAttrs $interface/vlan \
-                    -vlanCount [llength $QinQList] \
-                    -tpid $tpidlist \
-                    -vlanEnable True \
-                    -vlanId $vlanidlist \
-                    -vlanPriority $priorlist
-                    
-                catch { unset QinQList }
-            } else {
-Deputs Step50
-                if { [ info exists VlanId ] == 0 } {
-Deputs Step60
-                    set VlanId 1
-                }
-                if { [ info exists VlanTag ] } {
-Deputs Step70
-                    ixNet setMultiAttrs $interface/vlan \
-                        -vlanEnable True \
-                        -vlanCount 1 \
-                        -tpid $VlanTag \
-                        -vlanId $VlanId
-                } else {
-Deputs Step80
-                    ixNet setMultiAttrs $interface/vlan \
-                        -vlanEnable True \
-                        -vlanCount 1 \
-                        -vlanId $VlanId
-                }
-            }
-            ixNet commit
-            StartArpd
-        } result ] } {
-Deputs destroysuccess
-            IxiaCapi::Logger::LogIn -type err -message "$errorInfo" -tag $tag
-            catch { unset QinQList }
-            catch { uplevel 2 "delete object $name" } result
-Deputs $result
-Deputs destroysuccess
-            return $IxiaCapi::errorcode(7)
-        }
-        return $IxiaCapi::errorcode(0)
+        eval " CreateAccessHost $args "
     }
 	
 	body VlanSubInt::CreateAccessHost { args } {
@@ -3180,6 +3446,7 @@ Deputs destroysuccess
 Deputs "----- TAG: $tag -----"
         set EType [ list                \
                         OSPFV2ROUTER    \
+                        OSPFV3ROUTER    \
                         ISISROUTER      \
                         RIPROUTER       \
                         BGPV6ROUTER     \
@@ -3270,25 +3537,28 @@ Deputs "Type: $value"
             }
         }
 		if { [ info exists hostname ] == 0 } {
-		#modify 6.23
-		    #set hostname $HostName 
-			#Deputs " hostname: $hostname"
-			# if {$hostname == "" } {
-		      # set hostname ${this}_${tempname}_host
+		    if {$HostName != ""} {
+            Deputs "HostName: $HostName"
+                set hostname $HostName
+                set hostnum  [ $hostname cget -hostNum ]
+                set hostinfo [ $hostname cget -hostInfo ]
+                set pHandle  [$hostname cget -handle]
+                $hostname SettopHandle $pHandle
+                set intfhandle [ $hostname cget -topHandle]
+            } else {
+                set hostname ${this}_${tempname}_host
 
-              # CreateAccessHost -name $hostname 
-			# }
-			set hostname ${this}_${tempname}_host
-
-            CreateAccessHost -name $hostname 
-			########
+                CreateAccessHost -name $hostname 
+                ########
+                
+                set hostnum  [ $hostname cget -hostNum ]
+                set hostinfo [ $hostname cget -hostInfo ]
+                set pHandle  [$hostname cget -handle]
+                $hostname SettopHandle $pHandle
+                set intfhandle [ $hostname cget -topHandle]
+                    Deputs "nnnnnnnnnnpHandle $pHandle; intfhandle $intfhandle"
+            }
 			
-			set hostnum  [ $hostname cget -hostNum ]
-			set hostinfo [ $hostname cget -hostInfo ]
-			set pHandle  [$hostname cget -handle]
-			$hostname SettopHandle $pHandle
-			set intfhandle [ $hostname cget -topHandle]
-				Deputs "nnnnnnnnnnnnnpHandle $pHandle; intfhandle $intfhandle"
 				
         }
 # check the existence of necessary params
@@ -3302,12 +3572,7 @@ Deputs "Type: $value"
                 "$IxiaCapi::s_common1 $IxiaCapi::s_TestPortCreateRouter5 $EType" -tag $tag
             return $IxiaCapi::errorcode(3)
         }
-# Check pre-condition
-        #if { ( [ AgtInvoke AgtRoutingEngine GetState ] == "AGT_ROUTING_RUNNING" ) } {
-        #    IxiaCapi::Logger::LogIn -type err -message \
-        #    "$IxiaCapi::s_common6" -tag $tag
-        #    return $IxiaCapi::errorcode(8)
-        #}
+
 # Check whether this is a port sub-interface
 Deputs "Check sub-interface flag...$this"
         set flagSubInt  [ $this isa IxiaCapi::VlanSubInt ]
@@ -3333,26 +3598,30 @@ Deputs "Read Vlan info error: $err"
                 uplevel "IGMPClient $name $PortName $hostname"
             }
             MLDROUTER {
+                uplevel "MLDRouter $name $PortName $hostname "
             }
-			MLDHOST {
-			    if { [info exists hostname] } {
-				   uplevel "MLDHost $name $PortName $hostname "
-				} else {
-				   uplevel "MLDHost $name $PortName "
-				}
+			MLDHOST {			    
+                uplevel "MLDHost $name $PortName $hostname "
 
             }
 			LDPROUTER {
                 uplevel "LdpRouter  $name $PortName $hostname "
             }
 			BGPV4ROUTER {
-			    uplevel "BgpV4Router $name $PortName"
+			    uplevel "BgpV4Router $name $PortName null $hostname"
+			}
+            BGPV6ROUTER {
+			    uplevel "BgpV6Router $name $PortName null $hostname"
 			}
 			ISISROUTER {
-		        uplevel "IsisRouter $name $PortName $hostname"
+                uplevel "IsisRouter $name $PortName $hostname"
+		        
             }
 			OSPFV2ROUTER {
-			    uplevel "Ospfv2Router $name $PortName"
+			    uplevel "Ospfv2Router $name $PortName null $hostname "
+			}
+			OSPFV3ROUTER {
+			    uplevel "Ospfv3Router $name $PortName null $hostname "
 			}
             PIMROUTER {
                 uplevel "PimRouter $name $PortName"
@@ -3578,10 +3847,12 @@ Deputs "Read Vlan info error: $err"
 Deputs "RouterId:$routerId"
             switch $type {
                 OSPFV2ROUTER -
+                OSPFV3ROUTER -
                 ISISROUTER -
                 RIPROUTER -
                 PIMROUTER -
-                BGPV4ROUTER {
+                BGPV4ROUTER -
+                BGPV6ROUTER {
 Deputs "OSPF/ISIS/BGP/RIP/PIM"
                     uplevel "$name ConfigRouter -RouterId $routerId -Active enable"
                 }
@@ -3594,10 +3865,12 @@ Deputs "Other protocol..."
     # default value of Router ID --
             switch $type {
                 OSPFV2ROUTER -
+                OSPFV3ROUTER -
                 ISISROUTER -
                 RIPROUTER -
                 PIMROUTER -
-                BGPV4ROUTER {
+                BGPV4ROUTER -
+                BGPV6ROUTER {
                     uplevel "$name ConfigRouter -RouterId $defaultRouterId  -Active enable"
                 }
                 default {
@@ -3613,6 +3886,8 @@ Deputs "Other protocol..."
           
         # }
         lappend RouterList $name
+        eval "$PortName SetRouterList $name"
+
 		Deputs "mmmmmmmmRouterList: $RouterList"
         IxiaCapi::Logger::LogIn -message \
         "$IxiaCapi::s_TestPortCreateRouter3 $RouterList" -tag $tag

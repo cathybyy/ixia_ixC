@@ -9,6 +9,8 @@
 # add ConfigStream default l2 ethernet
 # change ConfigStream default l2 ethernet to CreateStream 408
 # if CreateStream only trafficName, no goto ConfigStream
+# merge with N55 version 2016.3.8
+# add -CustomHeader to ConfigStream 2016.6.29
 
 namespace eval IxiaCapi {
     
@@ -32,10 +34,15 @@ namespace eval IxiaCapi {
         private variable StreamLevel
         private variable ProfileLevel
 		public variable PortObj
+        public variable flowflag
 		
 		method SetPortObj { portname } {
 		    set PortObj $portname
 			puts "PortObj:$PortObj"
+		}
+        
+        method SetFlowFlag { value } {
+		    set flowflag $value
 		}
         
         method AddStream { streamname } {
@@ -67,6 +74,7 @@ Deputs "----- TAG: $tag -----"
         set StreamList [ list ]
         set StreamLevel 1
         set ProfileLevel 2
+        set flowflag 0
         # Get port name to create default profile
         set vport $portHnadle
         #CreateProfile -name ${this}_Profile1
@@ -147,7 +155,7 @@ Deputs "create profile done...configuration started"
     body TrafficEngine::DestroyProfile { args } {
         global errorInfo
         global IxiaCapi::TrafficManager
-        set tag "body TrafficEngine::CreateProfile [info script]"
+        set tag "body TrafficEngine::DestroyProfile [info script]"
         set level 1
 Deputs "----- TAG: $tag -----"
 # Param collection --
@@ -378,10 +386,19 @@ Deputs "Stream Type:$Type"
                             return $IxiaCapi::errorcode(4)
                             }
                             #set command " IxiaCapi::Stream $name $hPort $hTrafficItem $profileName "
-							set command " IxiaCapi::Stream $name $hPort $PortObj -profileName $profileName "
+                            if {$flowflag == 1 } {
+                                set command " IxiaCapi::Stream $name $hPort $PortObj -profileName $profileName -flowflag 1 "
+                            } else {
+                                set command " IxiaCapi::Stream $name $hPort $PortObj -profileName $profileName "
+                            }
+							
                         } else {
                             #set command " IxiaCapi::Stream $name $hPort $hTrafficItem"
-							set command " IxiaCapi::Stream $name $hPort $PortObj "
+                            if {$flowflag == 1 } {
+                                set command " IxiaCapi::Stream $name $hPort $PortObj -flowflag 1 "
+                            } else {
+							    set command " IxiaCapi::Stream $name $hPort $PortObj "
+                            }
                         }
                         
                     } result ] } {
@@ -646,6 +663,8 @@ Deputs "$StreamList "
         set level $StreamLevel
         set encapType MOD
         #set l2 "ethernet"
+        #l3flag used to decide whether the default l3 is ipv4 
+        set l3flag 0
         set frame_len_step 1
 		set ELenType    [ list fixed incr increment random ]
 		set EUnit [ list PPS MBPS PERCENT L3MBPS FPS BPS KBPS]
@@ -658,12 +677,22 @@ Deputs "args: $args"
                 -name -
                 -streamname {
                     #set name $value
-					set name [ IxiaCapi::NamespaceConvert $value $StreamList ]
-					
+					#set name [ IxiaCapi::NamespaceConvert $value $StreamList ]
+					set name [::IxiaCapi::NamespaceDefine $value]
 					Deputs "streamname: $name" 
 					Deputs "StreamList:$StreamList"
 					
                 }
+                -l3 -
+                -l3_protocol {
+                    set l3flag 1
+                }
+            }
+        
+        }
+        foreach { key value } $args {
+            set key [string tolower $key]
+            switch -exact -- $key {
                 -framelen {
                     set transLen [ IxiaCapi::Regexer::UnitTrans $value ]
                     if { [string is integer -strict $transLen ] } {
@@ -753,11 +782,73 @@ Deputs "args: $args"
                 -l4_protocol {
                     set l4 [ string tolower $value ]
                 }
+                -da -
+                -ethdst -
+                -ethdstmac {
+				    set value [ IxiaCapi::Regexer::MacTrans $value ]
+                    if { [ IxiaCapi::Regexer::IsMacAddress $value ] } {
+                        $name SetDstMac $value 
+                    }
+                        
+                }
+				-sa -
+                -ethsrc -
+                -ethsrcmac {
+				    set value [ IxiaCapi::Regexer::MacTrans $value ]
+                    if { [ IxiaCapi::Regexer::IsMacAddress $value ] } {
+                        $name SetSrcMac $value 
+                    }
+                   
+                }
+				-sourceipaddr -
+                -ipsrcaddr {
+
+                    if { [ IxiaCapi::Regexer::IsIPv4Address $value ] } {
+                        $name SetSrcIpv4 $value
+						if { $l3flag!=1 } {
+                            set l3 "ipv4"
+                        }
+						
+
+                    } 
+                }
+                -destipaddr -
+                -ipdstaddr -
+                -dstipaddr {
+                    if { [ IxiaCapi::Regexer::IsIPv4Address $value ] } {
+                        $name SetDstIpv4 $value
+                        if { $l3flag!=1 } {
+                            set l3 "ipv4"
+                        }
+												
+                    }
+                }
+				-qosmode -
+                -ipqosmode -
+				-configtosbit -
+                -qosvalue -
+				-precedence -
+                -ipprecedence -
+                -ipqosvalue {
+                    if { $l3flag!=1 } {
+                        set l3 "ipv4"
+                    }
+						            
+                }
+                -ipv6srcaddr -
+                -ipv6srcaddress {
+                    $name SetSrcIpv6 $value
+                }
+				-ipv6dstaddress -
+                -ipv6dstaddr  {
+                    $name SetDstIpv6 $value
+                }
                 -encaptype {
                     set encapType   $value
                 }
                 -vlanid {
-                    set l2 "ethernet_vlan"
+                    #set l2 "ethernet_vlan"
+                    set vlanid $value
                 }
                 -insertfcserror {
                     set insertfcserror [ string tolower $value ]
@@ -771,6 +862,10 @@ Deputs "args: $args"
                 -ipprotocol -
 				-ipprotocoltype {
                     set ipprotocol [ string tolower $value ]
+                }
+                -customheader {
+                    
+                    set customheader $value
                 }
             }
         }
@@ -934,7 +1029,46 @@ Deputs "des list:$desList"
                 # ixNet setA $endpointSet -destinations $desList
             }
 # ----- Modify fields -----
-Deputs Modify
+Deputs "Modify"
+        if { $encapType == "MOD" } {
+			    set argCMD ""
+				set tempsrcmac [ $name cget -srcMac]
+				set tempdstmac [ $name cget -dstMac]
+				set tempsrcipv4 [ $name cget -srcIpv4]
+				set tempdstipv4 [ $name cget -dstIpv4]
+				set tempsrcipv6 [ $name cget -srcIpv6]
+				set tempdstipv6 [ $name cget -dstIpv6]
+				if { $tempsrcmac  != "" } {
+				   set argCMD [lappend argCMD -EthSrc $tempsrcmac ]
+				}
+				if { $tempdstmac  != "" } {
+				   set argCMD [lappend argCMD -EthDst $tempdstmac ]
+				}
+				if { $tempsrcipv4  != "" } {
+				   set argCMD [lappend argCMD -IpSrcAddr $tempsrcipv4 ]
+				   set l3 "ipv4"
+				}
+				if { $tempdstipv4  != "" } {
+				   set argCMD [lappend argCMD -IpDstAddr $tempdstipv4 ]
+				   set l3 "ipv4"
+				}
+				if { $tempsrcipv6  != "" } {
+				   set argCMD [lappend argCMD -Ipv6SrcAddr $tempsrcipv6 ]
+				   set l3 "ipv6"
+				}
+				if { $tempdstipv6  != "" } {
+				   set argCMD [lappend argCMD -Ipv6DstAddr $tempdstipv6 ]
+				   set l3 "ipv6"
+				}
+				#set args [lappend argCMD $args ]
+				
+				foreach { key value } $args {
+				   
+				   lappend argCMD $key $value
+				}
+				set args $argCMD
+				Deputs "new args: $args"
+			}
 	    if { [ catch {
                 uplevel $level {
                     IxiaCapi::HeaderCreator IxHead
@@ -964,15 +1098,26 @@ Deputs [find object]
     # Create header and AddPdu
 
                 if { [ info exists l2 ] } {
+                    if { $encapType == "APP" } {
+					    uplevel $level "
+                        eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2
+						::IxiaCapi::pdul2 ChangeType SET "
+					} else {
+					    uplevel $level "
+                        eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2
+						::IxiaCapi::pdul2 ChangeType MOD "
+					}
                     switch -exact -- $l2 {
                         ethernet {
-                            uplevel $level "
-                            eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2"
+                            #uplevel $level "
+                           #eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2"
                             #uplevel $level "eval $name AddPdu -name ::IXIA::test::pdul2 "
+                            Deputs "l2 is ethernet"
 							$name AddPdu -name ::IxiaCapi::pdul2
 
                         }
                         ethernet_vlan {
+                            Deputs "L2:ethernet_vlan"
                             set vlan2   0
                             set vlan2Arg    [list]
                             foreach { key value } $args {
@@ -1016,15 +1161,14 @@ Deputs [find object]
                                 }
                             }
                             if { $vlan2 } {
-                                uplevel $level "
-                                eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2 
+                                uplevel $level "                      
                                 eval IxHead CreateVlanHeader $args -name ::IxiaCapi::pdul2_1
                                 eval IxHead CreateVlanHeader $vlan2Arg -name ::IxiaCapi::pdul2_2
-                                ::IxiaCapi::pdul2_1 ChangeType $encapType"                            
+                                ::IxiaCapi::pdul2_1 ChangeType $encapType
+                                ::IxiaCapi::pdul2_2 ChangeType $encapType"                            
                                 $name AddPdu -name { ::IxiaCapi::pdul2 ::IxiaCapi::pdul2_1 ::IxiaCapi::pdul2_2 } 
                             } else {
                                 uplevel $level "
-                                eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2 
                                 eval IxHead CreateVlanHeader $args -name ::IxiaCapi::pdul2_1 
                                 ::IxiaCapi::pdul2_1 ChangeType $encapType "                           
                                 $name AddPdu -name { ::IxiaCapi::pdul2 ::IxiaCapi::pdul2_1 } 
@@ -1038,8 +1182,8 @@ Deputs [find object]
                             #pdul2_1 ChangeType $encapType                            
                             #pdul2_2 ChangeType $encapType
                             # $name AddPdu -name { pdul2 pdul2_1 pdul2_2 } "
+                            Deputs "L2:ethernet_vlan_mpls"
                             uplevel $level "
-                            eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2
                             eval IxHead CreateVlanHeader $args -name ::IxiaCapi::pdul2_1
                             eval IxHead CreateMPLSHeader $args -name ::IxiaCapi::pdul2_2
                             ::IxiaCapi::pdul2_1 ChangeType $encapType
@@ -1180,6 +1324,7 @@ Deputs [find object]
                                 }
                             }
                             if { $vlan2 } {
+Deputs "vlan2 stack.............."
                                 uplevel $level "
                                 eval IxHead CreateVlanHeader $vlan2Arg -name ::IxiaCapi::pdul2_1_1
                                 ::IxiaCapi::pdul2_1_1 ChangeType $encapType"
@@ -1210,7 +1355,7 @@ Deputs "pdulist:$pduList"
                         }
                         ethernet_mpls {
                             uplevel $level "
-                            eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2
+                            
                             eval IxHead CreateMPLSHeader $args -name ::IxiaCapi::pdul2_1
                             ::IxiaCapi::pdul2_1 ChangeType $encapType                            
                             "
@@ -1486,7 +1631,7 @@ Deputs "pdulist:$pduList"
                                 ::IxiaCapi::pdul3 ChangeType $encapType  "
 								
 								if {[info exists ipprotocol] && [ info exists l4 ] == 0 } {
-								    Deputs "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+								   
 									 puts "ipprotocol:$ipprotocol"
 								     switch -exact -- $ipprotocol {
 										 icmp -
@@ -1575,7 +1720,7 @@ Deputs "pdulist:$pduList"
                                 ::IxiaCapi::pdul3 ChangeType $encapType "                           
                                 $name AddPdu -name ::IxiaCapi::pdul3
 								if {[info exists ipprotocol] && [ info exists l4 ] == 0 } {
-								    Deputs "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+								   
 									 puts "ipprotocol:$ipprotocol"
 								     switch -exact -- $ipprotocol {
 										 icmp -
@@ -1668,6 +1813,24 @@ Deputs "pdulist:$pduList"
                                 uplevel $level "
                                 eval IxHead CreateIPV6Header $args -name ::IxiaCapi::pdul3
 								eval IxHead CreateIPV4Header $args -name ::IxiaCapi::pdul3_2
+                                ::IxiaCapi::pdul3 ChangeType $encapType
+								::IxiaCapi::pdul3_2 ChangeType $encapType"                           
+                                $name AddPdu -name {::IxiaCapi::pdul3 ::IxiaCapi::pdul3_2}
+                            }
+                        }
+                        ipv6inipv4 {
+                            if { [ info exists l2 ] && ( $l2 == "ethernet" ) } {
+                                uplevel $level "
+                                eval IxHead CreateEthHeader $args -name ::IxiaCapi::pdul2 
+                                eval IxHead CreateIPV4Header $args -name ::IxiaCapi::pdul3
+								eval IxHead CreateIPV6Header $args -name ::IxiaCapi::pdul3_2
+                                ::IxiaCapi::pdul3 ChangeType $encapType 
+                                ::IxiaCapi::pdul3_2 ChangeType $encapType 								
+                                $name AddPdu -name { ::IxiaCapi::pdul2 ::IxiaCapi::pdul3 ::IxiaCapi::pdul3_2}"
+                            } else {
+                                uplevel $level "
+                                eval IxHead CreateIPV4Header $args -name ::IxiaCapi::pdul3
+								eval IxHead CreateIPV6Header $args -name ::IxiaCapi::pdul3_2
                                 ::IxiaCapi::pdul3 ChangeType $encapType
 								::IxiaCapi::pdul3_2 ChangeType $encapType"                           
                                 $name AddPdu -name {::IxiaCapi::pdul3 ::IxiaCapi::pdul3_2}
@@ -1796,6 +1959,13 @@ Deputs "OpValue not exist..."
                         }
                     }
                 }
+                
+                if { [ info exists customheader ] } {
+                    uplevel $level "
+                        eval IxPkt CreateCustomPkt $args -name ::IxiaCapi::pdul5
+                        ::IxiaCapi::pdul5 ChangeType $encapType "                                                       
+                        $name AddPdu -name ::IxiaCapi::pdul5 
+                }
 
                 ixNet commit
 				set rateUnit    1
@@ -1828,18 +1998,18 @@ Deputs "OpValue not exist..."
 
 					switch $streamloadunit {
 						MBPS {
-						    set streamload [expr $tempload * 100 / $portspeed]
+						    set streamload [expr $tempload * 100.0 / $portspeed]
 							#ixNet setA $hStreamGroup/frameRate -bitRateUnitsType mbitsPerSec
 						}
 						L3MBPS {
 							set rateUnit    1000000
 						}
 						BPS {
-						    set streamload [expr $tempload * 10000 / $portspeed]
+						    set streamload [expr $tempload * 10000.0 / $portspeed]
 							#ixNet setA $hStreamGroup/frameRate -bitRateUnitsType bitsPerSec
 						}
 						KBPS {
-						    set streamload [expr $tempload * 10 / $portspeed]
+						    set streamload [expr $tempload * 10.0 / $portspeed]
 							#ixNet setA $hStreamGroup/frameRate -bitRateUnitsType kbitsPerSec
 						}
 					}
@@ -1875,6 +2045,7 @@ Deputs "OpValue not exist..."
                 catch { uplevel $level { delete object ::IxiaCapi::pdul3 } }
 				catch { uplevel $level { delete object ::IxiaCapi::pdul3_2 } }
                 catch { uplevel $level { delete object ::IxiaCapi::pdul4 } }
+                catch { uplevel $level { delete object ::IxiaCapi::pdul5 } }
                 return $IxiaCapi::errorcode(7)
             } else {
 
@@ -1892,6 +2063,7 @@ Deputs "OpValue not exist..."
                 catch { uplevel $level { delete object ::IxiaCapi::pdul3 } }
 				catch { uplevel $level { delete object ::IxiaCapi::pdul3_2 } }
                 catch { uplevel $level { delete object ::IxiaCapi::pdul4 } }
+                catch { uplevel $level { delete object ::IxiaCapi::pdul5 } }
                 IxiaCapi::Logger::LogIn -message \
                 "$IxiaCapi::s_TrafficEngineCreateStream4 $name"            
                     return $IxiaCapi::errorcode(0)

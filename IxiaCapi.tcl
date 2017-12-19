@@ -27,6 +27,8 @@
 # Change made by Cathy on v3.5 2015.12.25 
 # Change made by Cathy on v3.6 2016.03.22 
 # Change made by Cathy on v3.7 2016.05.06 
+# Change made by Cathy on v3.8 2017.06.26
+#        1.modity GetEnvTcl for installInfo 
 
 
 package require Itcl
@@ -40,6 +42,9 @@ proc GetEnvTcl { product } {
    set latestKey      [ lindex $versionKey end ]
    if { $latestKey == "Multiversion" } {
       set latestKey   [ lindex $versionKey [ expr [ llength $versionKey ] - 2 ] ]
+      if {$latestKey == "InstallInfo"} {
+          set latestKey   [ lindex $versionKey [ expr [ llength $versionKey ] - 3 ] ]
+      }
    }
    set installInfo    [ append productKey \\ $latestKey \\ InstallInfo ]            
    return             [ registry get $installInfo  HOMEDIR ]
@@ -148,6 +153,6 @@ namespace import ::IxiaCapi::Regexer::*
 namespace import ::IxiaCapi::Logger::*
 namespace import ::IxiaCapi::Lib::*
 
-set ixCapiVersion 3.7
+set ixCapiVersion 3.9.0
 package provide IxiaCAPI $ixCapiVersion
 namespace import IxiaCapi::*

@@ -1,3 +1,12 @@
+# Copyright (c) Ixia technologies 2015-2017, Inc.
+
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+# Version 1.1 
+#       2. add catch to Bind, Enable,Rebind
 namespace eval IxiaCapi {
     
     class DHCPClient {
@@ -13,7 +22,7 @@ Deputs "----- TAG: $tag -----"
         }
         
         method ConfigRouter { args } {
-            set tag "body DHCPv6Client::ConfigRouter [info script]"
+            set tag "body DHCPClient::ConfigRouter [info script]"
 Deputs "----- TAG: $tag -----"
             foreach { key value } $args {
             set key [string tolower $key]
@@ -39,7 +48,7 @@ Deputs "----- TAG: $tag -----"
         }
         
         method Enable {} {
-            set tag "body DHCPv6Client::Enable [info script]"
+            set tag "body DHCPClient::Enable [info script]"
 Deputs "----- TAG: $tag -----"
             #eval $objName enable
             catch {
@@ -49,71 +58,71 @@ Deputs "----- TAG: $tag -----"
             
         }
         method Disable {} {
-            set tag "body DHCPv6Client::Disable [info script]"
+            set tag "body DHCPClient::Disable [info script]"
 Deputs "----- TAG: $tag -----"
             #eval $objName disable
-                       
             eval $objName release
-            
         }
         method Bind {} {
-            set tag "body DHCPv6Client::Bind [info script]"
+            set tag "body DHCPClient::Bind [info script]"
 Deputs "----- TAG: $tag -----"
             catch {
                 eval $objName request
             }
+            
         }
         method Rebind {} {
-            set tag "body DHCPv6Client::Rebind [info script]"
+            set tag "body DHCPClient::Rebind [info script]"
 Deputs "----- TAG: $tag -----"
-            eval $objName rebind
+            catch {
+                eval $objName rebind
+            }
+            
         }
         method Release {} {
-            set tag "body DHCPv6Client::Release [info script]"
+            set tag "body DHCPClient::Release [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName release
         }
         method Renew {} {
-            set tag "body DHCPv6Client::Renew [info script]"
+            set tag "body DHCPClient::Renew [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName renew
         }
         method Confirm {} {
-            set tag "body DHCPv6Client::Confirm [info script]"
+            set tag "body DHCPClient::Confirm [info script]"
 Deputs "----- TAG: $tag -----"
         }
         method InfoRequest {} {
-            set tag "body DHCPv6Client::InfoRequest [info script]"
+            set tag "body DHCPClient::InfoRequest [info script]"
 Deputs "----- TAG: $tag -----"
         }
         method Abort {} {
-            set tag "body DHCPv6Client::Abort [info script]"
+            set tag "body DHCPClient::Abort [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName abort
         }
         method Request {} {
-            set tag "body DHCPv6Client::Request [info script]"
+            set tag "body DHCPClient::Request [info script]"
 Deputs "----- TAG: $tag -----"
-            catch {
-                eval $objName request
-            }
+            eval $objName request
         }
         method Decline {} {
-            set tag "body DHCPv6Client::Decline [info script]"
+            set tag "body DHCPClient::Decline [info script]"
 Deputs "----- TAG: $tag -----"
         }
         method GetRouterStats {} {
-            set tag "body DHCPv6Client::GetRouterStats [info script]"
+            set tag "body DHCPClient::GetRouterStats [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName get_detailed_stats
         }
         method GetHostResults {} {
-            set tag "body DHCPv6Client::GetHostResults [info script]"
+            set tag "body DHCPClient::GetHostResults [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName get_detailed_stats
         }
 		method GetHostState { args } {
-            set tag "body DHCPv6Client::GetHostState [info script]"
+            set tag "body DHCPClient::GetHostState [info script]"
 Deputs "----- TAG: $tag -----"
             eval $objName get_per_session $args
         }
@@ -148,12 +157,14 @@ Deputs "----- TAG: $tag -----"
             set argslist(-duidenterpricenum)              -duid_enterprise
             set argslist(-duidstartvalue)                 -duid_start
             set argslist(-duidstepvalue)                  -duid_step  
-            set argslist(-optionpayload)                  -option_payload
+            #set argslist(duidcustomvalue)
             #set argslist(enablelightweightdra)
             set argslist(-enablerelayagent)               -enable_relay_agent
             set argslist(-relayagentserverip)             -relay_server_ipv4_addr
             set argslist(-relayagentserveripstep)         -relay_server_ipv4_addr_step
-            #set argslist(requestedprefixlength)
+            set argslist(-optionvalue)                    -option_value
+            set argslist(-optionpayload)                  -option_payload
+            set argslist(-solicitattempt)           -solicit_attempt
             #set argslist(requestedstartingaddr)
             #set argslist(dhcpv6cpsipv6addr)
             #set argslist(enableauthentication)
@@ -173,9 +184,9 @@ Deputs "----- TAG: $tag -----"
             set argslist(-active)                          -enabled
 			set argslist(-localmac)                        -mac_addr
             set argslist(-clientlocalmac)                  -mac_addr
-			set argslist(-vlanid1)                         -vlan_id
+			set argslist(-vlanid1)                           -vlan_id
 			set argslist(-count)                           -count
-			set argslist(-vlanpriority1)                   -outer_vlan_priority
+			set argslist(-vlanpriority1)                        -outer_vlan_priority
             
         }
 		
@@ -232,8 +243,9 @@ Deputs "----- TAG: $tag -----"
             set argslist(-active)                          -enabled
 			set argslist(-localmac)                        -mac_addr
             set argslist(-clientlocalmac)                  -mac_addr
-			set argslist(-vlanid1)                         -vlan_id
-			set argslist(-count)                           -count
+            set argslist(-vlanid1)                         -vlan_id	
+            set argslist(-count)                           -count            
+			set argslist(-vlanpriority1)                   -outer_vlan_priority
             
         }
 							
@@ -328,18 +340,20 @@ Deputs "----- TAG: $tag -----"
             
             
             #set argslist(-active)
-            set argslist(-leasetime)             -lease_time
-            set argslist(-poolstart)             -pool_ip_start
-			set argslist(-addrpoolstartaddr)      -pool_ip_start
+            set argslist(-leasetime)               -lease_time
+            set argslist(-poolstart)               -pool_ip_start
+			set argslist(-addrpoolstartaddr)       -pool_ip_start
             set argslist(-poolnum)                 -pool_ip_count
 			set argslist(-addrpooladdrperserver)   -pool_ip_count
-            set argslist(-poolmodifier)            -pool_ip_pfx
+            set argslist(-poolmodifier)            -pool_ip_modifier
+            set argslist(-poolprefix)              -pool_ip_pfx
             #set argslist(-poolformacpattern)
-            set argslist(-poolformacstart)        -mac_addr
-            set argslist(-poolformacmodifier)     -mac_addr_step
-			set argslist(-localmac)               -mac_addr
-			set argslist(-ipv4addr)               -ipv4_addr
-			set argslist(-vlanid1)                -vlan_id
+            set argslist(-poolformacstart)         -mac_addr
+            set argslist(-poolformacmodifier)      -mac_addr_step
+			set argslist(-localmac)                -mac_addr
+			set argslist(-ipv4addr)                -ipv4_addr
+            set argslist(-testeripaddr)            -ipv4_addr
+			set argslist(-vlanid1)                 -vlan_id
             set argslist(-count)                  -count
             # set argslist(-dhcpofferoption)            
             # set argslist(-dhcpackoption)              
@@ -365,17 +379,19 @@ Deputs "----- TAG: $tag -----"
             
             
             #set argslist(-active)
-            set argslist(-leasetime)             -lease_time
-            set argslist(-poolstart)             -pool_ip_start
-			set argslist(-addrpoolstartaddr)      -pool_ip_start
+            set argslist(-leasetime)               -lease_time
+            set argslist(-poolstart)               -pool_ip_start
+			set argslist(-addrpoolstartaddr)       -pool_ip_start
             set argslist(-poolnum)                 -pool_ip_count
 			set argslist(-addrpooladdrperserver)   -pool_ip_count
-            set argslist(-poolmodifier)            -pool_ip_pfx
+            set argslist(-poolmodifier)            -pool_ip_modifier
+            set argslist(-poolprefix)              -pool_ip_pfx
             #set argslist(-poolformacpattern)
-            set argslist(-poolformacstart)        -mac_addr
-            set argslist(-poolformacmodifier)     -mac_addr_step
-			set argslist(-localmac)               -mac_addr
-			set argslist(-ipv6addr)               -ipv6_addr
+            set argslist(-poolformacstart)         -mac_addr
+            set argslist(-poolformacmodifier)      -mac_addr_step
+			set argslist(-localmac)                -mac_addr
+			set argslist(-ipv6addr)                -ipv6_addr
+            set argslist(-testeripaddr)            -ipv6_addr
 			set argslist(-vlanid1)                 -vlan_id
             set argslist(-count)                   -count
             # set argslist(-dhcpofferoption)            

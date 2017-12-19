@@ -12,6 +12,7 @@ package provide IxiaCapi_TestStatistic 1.0
 # Version 1.3
 #   modify 12.1 save cap file from remote client pc :StopCapture
 #   modify GetStreamStats for more than one page
+#   modify GetPortStats for no signature situation
 
 namespace eval IxiaCapi {
     
@@ -24,6 +25,9 @@ namespace eval IxiaCapi {
 		method GetStreamStats { args } {}
 		method SetPortName { name } {
 		    set statPortName $name
+		}
+        method SetFlowFlag { value } {
+		    set flowflag $value
 		}
         method destructor {}
         
@@ -38,7 +42,7 @@ namespace eval IxiaCapi {
         
         public variable portStatsList
         public variable streamStatsList
-        
+        public variable flowflag
     }
     
     body TestStatistic::constructor { portHandle } {
@@ -47,6 +51,7 @@ namespace eval IxiaCapi {
 Deputs "----- TAG: $tag -----"
         set strObjList [ list ]
         set hPort $portHandle
+        set flowflag 0
         set portView {::ixNet::OBJ-/statistics/view:"Port Statistics"}
 		set dataPortview {::ixNet::OBJ-/statistics/view:"Data Plane Port Statistics"}
         set flowView {::ixNet::OBJ-/statistics/view:"Flow Statistics"}
@@ -55,7 +60,8 @@ Deputs "----- TAG: $tag -----"
     
     body TestStatistic::GetPortStats { args } {
         
-        global errorInfo        
+        global errorInfo   
+        set noSignature 0        
         set tag "body TestStatistics::GetPortStats [info script]"
 Deputs "----- TAG: $tag -----"
         
@@ -181,6 +187,7 @@ Deputs "----- TAG: $tag -----"
                 }
                 -filtername {
                 }
+                
             }
         }
         if { $hPort == [ixNet getNull] } {
@@ -189,10 +196,15 @@ Deputs "----- TAG: $tag -----"
         }
 # Get acuumulated value
         set statistics  [ ixNet getA $portView/page -columnCaptions ]
-	
-		set datastatistics  [ ixNet getA $dataPortview/page -columnCaptions ]
+	    if { [catch { set datastatistics  [ ixNet getA $dataPortview/page -columnCaptions ]  }]} {
+            set noSignature 1
+        } else {
+            Deputs "data stats:$datastatistics"
+        }
+        
+		
 Deputs "stats:$statistics"
-Deputs "data stats:$datastatistics"
+
 # Port Information
         set portInfo [ixNet getA $hPort -connectionInfo]
         regexp {chassis=\"([\d\.]+)\"} $portInfo match chassis
@@ -478,77 +490,109 @@ Deputs " trans value:$value"
             uplevel 1 "set $AverageLantency NAN"
         }
 		
-		set dataresultList [ ixNet getA $dataPortview/page -rowValues ]
-		set rx_port        [ lsearch -exact $datastatistics Port]
-		set resultIndex 0
-        set portFound   0
-        foreach dataresult $dataresultList {
-		    eval {set dataresult} $dataresult		    
-		    set a [ lindex $dataresult $rx_port ] 
-		    if { $statPortName != [ lindex $dataresult $rx_port ] } {
-			    continue
-		    }
-            
+        if {$noSignature == 0 } {
+            set dataresultList [ ixNet getA $dataPortview/page -rowValues ]
+            set rx_port        [ lsearch -exact $datastatistics Port]
+            set resultIndex 0
+            set portFound   0
+            foreach dataresult $dataresultList {
+                eval {set dataresult} $dataresult		    
+                set a [ lindex $dataresult $rx_port ] 
+                if { $statPortName != [ lindex $dataresult $rx_port ] } {
+                    continue
+                }
+                
+                if { [ info exists RxSignature ] } {
+                    set index [ lsearch -exact $datastatistics {Rx Frames}  ]				
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $RxSignature $value"
+                } 
+                
+                if { [ info exists TxSignature ] } {
+                    set index [ lsearch -exact $datastatistics {Tx Frames} ]
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $TxSignature $value"
+                }
+                if { [ info exists RxL1BitRate ] } {
+                    set index [ lsearch -exact $datastatistics {Rx L1 Rate (bps)}  ]				
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $RxL1BitRate $value"
+                } 
+                
+                if { [ info exists TxL1BitRate ] } {
+                    set index [ lsearch -exact $datastatistics {Tx L1 Rate (bps)}  ]				
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $TxL1BitRate $value"
+                }
+                
+                if { [ info exists RxL2BitRate ] } {
+                    set index [ lsearch -exact $datastatistics {Rx Rate (bps)}  ]				
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $RxL2BitRate $value"
+                } 
+                
+                if { [ info exists TxL2BitRate ] } {
+                    set index [ lsearch -exact $datastatistics {Tx Rate (bps)}  ]				
+                    set value [ lindex $dataresult $index ]
+                    set value [ IxiaCapi::Regexer::IntTrans $value ]
+                    if { [ string is double $value ] == 0 || $value == ""} {
+                        set value 0
+                    }
+                    uplevel 1 "set $TxL2BitRate $value"
+                }
+                    
+            }
+        } else {
+            set errmsg 0
             if { [ info exists RxSignature ] } {
-				set index [ lsearch -exact $datastatistics {Rx Frames}  ]				
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $RxSignature $value"
-		    } 
-			
-			if { [ info exists TxSignature ] } {
-				set index [ lsearch -exact $datastatistics {Tx Frames} ]
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $TxSignature $value"
-			}
-			if { [ info exists RxL1BitRate ] } {
-				set index [ lsearch -exact $datastatistics {Rx L1 Rate (bps)}  ]				
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $RxL1BitRate $value"
-		    } 
-			
-			if { [ info exists TxL1BitRate ] } {
-				set index [ lsearch -exact $datastatistics {Tx L1 Rate (bps)}  ]				
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $TxL1BitRate $value"
-		    }
-			
-			if { [ info exists RxL2BitRate ] } {
-				set index [ lsearch -exact $datastatistics {Rx Rate (bps)}  ]				
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $RxL2BitRate $value"
-		    } 
-			
-			if { [ info exists TxL2BitRate ] } {
-				set index [ lsearch -exact $datastatistics {Tx Rate (bps)}  ]				
-				set value [ lindex $dataresult $index ]
-				set value [ IxiaCapi::Regexer::IntTrans $value ]
-				if { [ string is double $value ] == 0 || $value == ""} {
-					set value 0
-				}
-				uplevel 1 "set $TxL2BitRate $value"
-		    }
-				
-		}
+                    
+                uplevel 1 "set $RxSignature $errmsg"
+            } 
+            
+            if { [ info exists TxSignature ] } {
+               
+                uplevel 1 "set $TxSignature $errmsg"
+            }
+            if { [ info exists RxL1BitRate ] } {
+                
+                uplevel 1 "set $RxL1BitRate $errmsg"
+            } 
+            
+            if { [ info exists TxL1BitRate ] } {
+                
+                uplevel 1 "set $TxL1BitRate $errmsg"
+            }
+            
+            if { [ info exists RxL2BitRate ] } {
+                
+                uplevel 1 "set $RxL2BitRate $errmsg"
+            } 
+            
+            if { [ info exists TxL2BitRate ] } {
+                
+                uplevel 1 "set $TxL2BitRate $errmsg"
+            }
+        }
         
         return $IxiaCapi::errorcode(0)
     }
@@ -1027,12 +1071,20 @@ Deputs "rxframes var:$value"
 				-maxlatency {
                     set MaxLantency $value
                 }
+                -rxavgjitter {
+                    set rxavgjitter $value
+                }
             }
         }
 
 
         set statistics [ ixNet getA $flowView/page -columnCaptions ]
-		set flowInfoIndex [ lsearch -exact $statistics {Traffic Item} ]
+        if { $flowflag } {
+            set flowInfoIndex [ lsearch -exact $statistics {Flow Group} ]
+        } else {
+            set flowInfoIndex [ lsearch -exact $statistics {Traffic Item} ]
+        }
+		
         set RxportInfoIndex [ lsearch -exact $statistics {Rx Port} ]
 		set TxportInfoIndex  [ lsearch -exact $statistics {Tx Port} ]
 		
@@ -1349,6 +1401,18 @@ Deputs "rxframes var:$value"
 					# uplevel 1 "set $TxL2BitRate 0"
 
 				# }
+                
+                if { [ info exists rxavgjitter ] } {
+					set index [ lsearch -exact $statistics {Avg Delay Variation (ns)}  ]				
+					set value [ lindex $result $index ]
+					set value [ IxiaCapi::Regexer::IntTrans $value ]
+					if { [ string is double $value ] == 0 || $value == ""} {
+						set value 0
+					}
+					uplevel 1 "set $rxavgjitter $value"
+					
+
+				}
 			
 			
 			}
@@ -1443,6 +1507,14 @@ Deputs "pkt count:$pktCnt"
 			return $pktCnt
 		    
 		}
+		
+		method SetControlFlag { cflag } {
+		    set controlflag $cflag
+		}
+		
+		method SetWiresharkPath { wpath } {
+		    set wiresharkPath $wpath
+		}
 
         private variable hPort
         private variable Mode
@@ -1455,6 +1527,8 @@ Deputs "pkt count:$pktCnt"
 		public variable capMode
 		public variable hcontent 
         public variable state
+		public variable controlflag
+		public variable wiresharkPath
 		
 		
     }
@@ -1470,19 +1544,32 @@ Deputs "----- TAG: $tag -----"
 		set hcontent [list]
 		set SavePath $IxiaCapi::gSavePath
 		set capMode $cmode
-        
+        set controlflag 0
+		set wiresharkPath ""
         if { [ catch {
             set hPort $portHandle
             ixNet setA $portHandle -rxMode captureAndMeasure
+            if { [ ixNet getA $hPort -rxMode ] != "captureAndMeasure" } {
+			    ixNet setA $hPort -rxMode capture
+		        ixNet commit
+		    }
 			Deputs "cmode: $capMode"
 			if { $capMode == "control"} {
 			    ixNet setA $portHandle/capture -hardwareEnabled False
                 ixNet setA $portHandle/capture -softwareEnabled True
-			} else {
+			} elseif { $capMode == "all"} {
+                ixNet setA $portHandle/capture -softwareEnabled True
+                ixNet setA $portHandle/capture -hardwareEnabled True
+            } else {
 			    ixNet setA $portHandle/capture -softwareEnabled False
                 ixNet setA $portHandle/capture -hardwareEnabled True
 			}
             ixNet commit
+            
+            catch {
+                ixNet setA $portHandle/capture -controlBufferSize 5
+                ixNet commit
+            }
         } result ] } {
             IxiaCapi::Logger::LogIn -type err -message "$IxiaCapi::s_TestAnalysisCtor2 $errorInfo" -tag $tag
         } else {
@@ -1507,13 +1594,17 @@ Deputs "----- TAG: $tag -----"
 
         if { [ catch {
 Deputs "Port rx mode on $hPort : [ ixNet getA $hPort -rxMode ]"	
-            if { [ ixNet getA $hPort -rxMode ] != "captureAndMeasure" } {
-			    ixNet setA $hPort -rxMode capture
-		        ixNet commit
-		    }
-			while { [ixNet getA $hPort -state] != "up" } {
-			    after 1000
-		    }
+            
+            for { set i 0} {$i < 10 } {incr i} {
+                if { [ixNet getA $hPort -state] != "up" } {
+			        after 1000
+                    Deputs "$hPort is down"
+		        } else {
+                    Deputs "$hPort is up"
+                    break
+                }
+            }
+			
 			set root [ixNet getRoot]
 			set trafficnum [ixNet getL [ixNet getL $root traffic] trafficItem]
 			
@@ -1534,7 +1625,7 @@ Deputs "Port rx mode on $hPort : [ ixNet getA $hPort -rxMode ]"
 				    }
 			    }
 			}
-			if { $trafficnum == "" && $routerflag != ""} {
+			if { $trafficnum == "" && $routerflag != "" && $controlflag == 0} {
 			    set capMode "control"
 				ixNet setA $hPort/capture -softwareEnabled True
 				ixNet setA $hPort/capture -hardwareEnabled False
@@ -1543,7 +1634,15 @@ Deputs "Port rx mode on $hPort : [ ixNet getA $hPort -rxMode ]"
 			    ixNet setA $hPort/capture -softwareEnabled True
 				ixNet setA $hPort/capture -hardwareEnabled False
 				ixNet commit
-			}
+			} else {
+            Deputs "reset capture"
+                ixNet setA $hPort/capture -softwareEnabled False
+				ixNet setA $hPort/capture -hardwareEnabled False
+				ixNet commit
+                after 1000
+                ixNet setA $hPort/capture -hardwareEnabled True
+                ixNet commit
+            }
 			
             set root [ixNet getRoot]
 			set portlist [ixNet getL $root vport]
@@ -1568,7 +1667,7 @@ Deputs "start capture..."
             IxiaCapi::Logger::LogIn -message "$IxiaCapi::s_TestAnalysisStartCapture2"
                     return $IxiaCapi::errorcode(7)
         } else {
-            after 2000
+            #after 2000
             IxiaCapi::Logger::LogIn -message "$IxiaCapi::s_TestAnalysisStartCapture1"
                     return $IxiaCapi::errorcode(0)
         }
@@ -1607,7 +1706,7 @@ Deputs "path:$SavePath\tporthandle:$hPort"
                     set portName [ IxiaCapi::PortManager GetPortName $hPort ]
                     set portName [ namespace tail $portName ]
     #Deputs "port name:$portName"
-                    cd $dir
+                    #cd $dir
                     set len [ string length $portName ]
                     for { set index 0 } { $index < $len } { incr index } {
                         if { [ string index $portName $index ] == "/" } {
@@ -1617,24 +1716,51 @@ Deputs "path:$SavePath\tporthandle:$hPort"
                     catch {
 					    if { $capMode == "control" } {
 						    set filecap "--${portName}_SW.cap"
-						} else {
+						} elseif { $capMode == "all" } {
+                            set filecap1 "--${portName}_SW.cap"
+                            set filecap2 "--${portName}_HW.cap"
+                        } else {
                             set filecap "--${portName}_HW.cap"
 						}
-                        ixNet exec copyFile [ixNet readFrom $dir/$filecap -ixNetRelative] [ixNet writeTo $dir/$filecap -overWrite]
+                        
+                        if { $capMode == "all" } {
+                            ixNet exec copyFile [ixNet readFrom $dir/$filecap1 -ixNetRelative] [ixNet writeTo $dir/$filecap1 -overWrite]
+                            ixNet exec copyFile [ixNet readFrom $dir/$filecap2 -ixNetRelative] [ixNet writeTo $dir/$filecap2 -overWrite]
+                        } else {
+                            ixNet exec copyFile [ixNet readFrom $dir/$filecap -ixNetRelative] [ixNet writeTo $dir/$filecap -overWrite]
+                        }
+                        
                     }
                     if { [ catch {
 					    if { $capMode == "control" } {
-						    set fileCap [ glob *{${portName}_SW}*.cap ]
+						    set fileCap [ glob -directory $dir -tails *{${portName}_SW}*.cap ]
+                            
+						} elseif { $capMode == "all" } {
+						    set fileCap1 [ glob -directory $dir -tails *{${portName}_SW}*.cap ]
+                            set fileCap2 [ glob -directory $dir -tails *{${portName}_HW}*.cap ]
+                            
 						} else {
-                            set fileCap [ glob *{${portName}_HW}*.cap ]
+                            set fileCap [ glob -directory $dir -tails *{${portName}_HW}*.cap ]
 						}
                         
                         Deputs "dir:$dir"
                         Deputs "file:$file"
-                        Deputs "fileCap:$fileCap"
+                      
+                        if { $capMode == "all" } {
+                            Deputs "fileCap1:$fileCap1"
+                            Deputs "fileCap2:$fileCap2"
+                            file delete -force "$dir/$file"
+                           if { $wiresharkPath != ""} {
+						       
+                               exec "$wiresharkPath/mergecap.exe" -w $dir/$file $dir/$fileCap1 $dir/$fileCap2
+                           }
+                        } else {
+                            Deputs "fileCap:$fileCap"
+                            file delete -force "$dir/$file"
+                            file rename -force "$dir/$fileCap" "$dir/$file"
+                        }
                         
-                        file delete -force "$dir/$file"
-                        file rename -force "$dir/$fileCap" "$dir/$file"
+                        
                     } ] } {
     Deputs "$errorInfo"                    
                         IxiaCapi::Logger::LogIn -message "$IxiaCapi::s_TestAnalysisStopCapture5"

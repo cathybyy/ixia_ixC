@@ -844,6 +844,8 @@ Deputs "----- TAG: $tag -----"
                 -host {
                     if { [ IxiaCapi::Regexer::IsIPv4Address  $value ] && ![ IxiaCapi::Regexer::IsIPv4MulticastAddress $value ] } {
                         set address $value
+                    } elseif { [ IxiaCapi::Regexer::IsIPv6Address  $value ]  } {
+                        set address $value
                     } else {
                         set hostname $value
                     }
@@ -866,6 +868,8 @@ Deputs "----- TAG: $tag -----"
                 }
                 -source {
                     if { [ IxiaCapi::Regexer::IsIPv4Address  $value ] && ![ IxiaCapi::Regexer::IsIPv4MulticastAddress $value ] } {
+                        set srcIp $value
+                    } elseif { [ IxiaCapi::Regexer::IsIPv6Address  $value ]  } {
                         set srcIp $value
                     } else {
                         IxiaCapi::Logger::LogIn -type err -message \

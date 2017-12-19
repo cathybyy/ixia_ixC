@@ -1,3 +1,11 @@
+# Copyright (c) Ixia technologies 2015-2017, Inc.
+
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+
 namespace eval IxiaCapi {
     
     class IGMPClient {
@@ -123,18 +131,33 @@ Deputs "----- TAG: $tag -----"
 			foreach { key value } $args {
 				set key [string tolower $key]
 				switch -exact -- $key {
+                    -grouppoolname -
 					-grouppoollist {
 						set grouppoolname $value
 					}
 				}
 			}
 			
-			foreach poolname $grouppoolname {
-			    set index [lsearch $groupName $poolname]
-				if { $index >= 0} {
-				   lreplace $groupName $index $index
-				}
- 			}
+		
+            
+            if { [info exists grouppoolname ] } {
+                foreach poolname $grouppoolname {
+                    set index [lsearch $groupName $poolname]
+                    if { $index >= 0} {
+                       $poolname unconfig
+                       catch { uplevel " delete object $poolname " }
+                       set groupName [lreplace $groupName $index $index]
+                    }
+                }
+                               
+            
+            } else {
+                foreach poolname $groupName {
+                    $poolname unconfig
+                    catch { uplevel " delete object $poolname " }
+                } 
+                set groupName ""
+            }
            
         }
         
@@ -150,12 +173,13 @@ Deputs "----- TAG: $tag -----"
                 }
             }
 			
-            Deputs "gouppoolname:$grouppoolname"
+           
             if {[ info exists grouppoolname ]} {
+                Deputs "gouppoolname:$grouppoolname"
                 #eval $objName join_group -group $grouppoolname
 				$objName join_group -group $grouppoolname
 			} else {
-			    eval $objName join_group
+			    eval $objName join_group -group $groupName
 			}
         }
         method SendLeave { args} {
@@ -174,7 +198,7 @@ Deputs "----- TAG: $tag -----"
                 #eval $objName leave_group -group $grouppoolname
 				$objName leave_group -group $grouppoolname
 			} else {
-			    eval $objName leave_group
+			    eval $objName leave_group -group $groupName
 			}
         }
 		

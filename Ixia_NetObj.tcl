@@ -1,6 +1,6 @@
 # Copyright (c) Ixia technologies 2010-2011, Inc.
 
-# Release Version 1.5
+# Release Version 1.6
 #===============================================================================
 # Change made
 # Version 1.0 
@@ -19,6 +19,11 @@
 # Version 1.5.
 #		9. tlv inherit header
 #       10. modify vlan config of ProtocolStackObject.config
+# Version 1.6.
+#		11. add global var macPool in ProtocolStackObject::config
+#		12. incr mac_addr if there's a reord in macPool
+# Version 1.7
+#       13. add ProtocolStackObject unconfig in order to delete ethernet of the protocols
 
 class NetObject {
     public variable handle
@@ -140,14 +145,34 @@ Deputs "onStack:$onStack"
     }
 	
     method config { args } {}
+    method unconfig {} {
+        global errorInfo
+		global errNumber
+		set tag "body ProtocolStackObject::unconfig [info script]"
+Deputs "----- TAG: $tag -----"
+        catch {
+			ixNet remove $handle
+			ixNet commit
+		}
+		set handle ""
+        catch {
+			ixNet remove $stack
+			ixNet commit
+		}
+        set stack ""
+		return [ GetStandardReturnHeader ]
+    }
 }
 
 body ProtocolStackObject::config { args } {
 	
     global errorInfo
     global errNumber
+	global macPool
+	
     set tag "body ProtocolStackObject::config [info script]"
 Deputs "----- TAG: $tag -----"
+Deputs "Args:$args "
     foreach { key value } $args {
         set key [string tolower $key]
         switch -exact -- $key {
@@ -282,7 +307,23 @@ Deputs "----- TAG: $tag -----"
     set range $handle
 	
     if { [ info exists mac_addr ] } {
-        ixNet setA $range/macRange -mac $mac_addr
+		if { [ $this isa PppoeHost ] } {
+			if { ![ info exists macPool ] } {
+				set macPool $mac_addr
+Deputs "set mac pool:$macPool"			
+			} else {
+Deputs "mac pool:$macPool"		
+				set searchIndex [ lsearch -exact $macPool $mac_addr ]
+				if { $searchIndex >= 0 } {
+Deputs "Duplicate mac found, incr automatically."			
+					set newMacAddr [ IncrMacAddr [ lindex $macPool end ] ]
+					lappend macPool $newMacAddr
+					set mac_addr $newMacAddr
+				}
+			}
+		}
+		
+		ixNet setA $range/macRange -mac $mac_addr
     }
     if { [ info exists mac_addr_step ] } {
         ixNet setA $range/macRange -incrementBy $mac_addr_step
@@ -509,6 +550,7 @@ class RouteBlock {
 		set label_mode ""
 		set user_label ""
 		set as_path ""
+
 	}
 	method config { args } {}
 }
@@ -528,7 +570,7 @@ Deputs "Args:$args "
             	set num $value
             }   
             -address_family {
-                set type $value
+                set type [string tolower $value]
             }            
             -start {
 				if { [ IsIPv4Address $value ] } {
@@ -586,6 +628,7 @@ Deputs "Args:$args "
 			-as_path {
                 set as_path $value
             }
+
         }
     }
 	

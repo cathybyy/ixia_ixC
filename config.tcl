@@ -177,6 +177,7 @@ namespace eval IxiaCapi {
                            AgtTrafficEngine        \
                            AgtStatisticEngine      \
                            BgpV4Router     \
+						   BgpV6Router     \
                            BgpRouteBlock   \
                            Ospfv2TopGrid   \
                            Ospfv2TopRouter         \
@@ -192,6 +193,7 @@ namespace eval IxiaCapi {
                            Ospfv2TeRouterLsa       \
                            Ospfv2TeLinkLsa         \
                            Ospfv2Router            \
+                           Ospfv3Router            \
 						   SimulatedExternalRoute  \
 						   SimulatedIntraAreaRoute \
 						   SimulatedRouter         \
@@ -252,6 +254,7 @@ namespace eval IxiaCapi {
 						   BgpSession       \
 						   OspfSession    \
 						   Ospfv2Session    \
+                           Ospfv3Session    \
                            SimulatedRouter  \
                            IsisSession    \
                            SimulatedRoute  \
@@ -268,6 +271,8 @@ namespace eval IxiaCapi {
                            IgmpOverDhcpHost  \
                            MldHost       \
                            MLDHost     \
+                           MLDRouter   \
+                           MldQuery    \
                            PppoeHost   \
                            Pppoev6Host   \
                            Pppoev4v6Host   \

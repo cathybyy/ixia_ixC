@@ -62,12 +62,15 @@ Deputs "-----intfhandle: $intfhandle -----"
 			set argslist(-groupincrement)                   -group_step
             set argslist(-srcincrement)                     -source_step			
             
+			set argslist(-discoveryoptionvalue)                     -option60	
         }
         
         method ConfigRouter { args } {
             set tag "body IGMPODHCPClient::ConfigRouter [info script]"
 Deputs "----- TAG: $tag -----"
+Deputs "Args:$args "
             eval ProtocolConvertObject::convert $args
+Deputs "New Args:$args "
 			eval $dhcpObjName config $newargs
             eval $objName config $newargs
             #eval $objName join_group $newargs

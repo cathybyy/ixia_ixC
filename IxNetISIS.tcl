@@ -1,3 +1,12 @@
+# Copyright (c) Ixia technologies 2015-2017, Inc.
+# Release Version 1.1
+#===============================================================================
+# Change made
+# Version 1.0 
+#       1. Create
+# Version 1.1
+#       1. add delete block in destructor
+
 namespace eval IxiaCapi {
     
     class IsisRouter {
@@ -6,15 +15,17 @@ namespace eval IxiaCapi {
         #public variable argslist
         public variable objName
         public variable className
+        public variable blockList
        
 		constructor { Port { hostname null } } {
             set tag "body IsisRouter::ctor [info script]"
 Deputs "----- TAG: $tag -----"
 
             set className IsisSession
+            set blockList ""
             #IsisSession ${this}_c  $Port
             if { $hostname != "null" } {
-			    set intfhandle [ $hostname cget -interface]
+			   set intfhandle [ $hostname cget -interface]
 			   IsisSession ${this}_c  $Port $intfhandle
                #${this}_c config -router_id $routerId
             } else {
@@ -30,7 +41,8 @@ Deputs "----- TAG: $tag -----"
             set argslist(-systemid)                -sys_id          
             set argslist(-routinglevel)            -level
 			set argslist(-metric)                  -metric
-			
+			set argslist(-l2routerpriority)        -l2routerpriority
+            set argslist(-l1routerpriority)        -l1routerpriority
 			set argslist(-flagwidemetric)          -flagwidemetric
 			set argslist(-FlagRestartHelper)       -FlagRestartHelper
 			set argslist(-FlagDropSutLsp)          -FlagDropSutLsp
@@ -81,7 +93,7 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
@@ -89,9 +101,10 @@ Deputs "----- TAG: $tag -----"
             eval ProtocolConvertObject::convert $args
 			puts $objName 
 			puts $newargs
-            RouteBlock $blocknamename
-            eval $blocknamename config $newargs
-            eval $objName set_route -route_block  $blocknamename
+            RouteBlock $blockname
+            lappend blockList $blockname
+            eval $blockname config $newargs
+            eval $objName set_route -route_block  $blockname
 			     
         }
         
@@ -102,7 +115,7 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
@@ -110,8 +123,8 @@ Deputs "----- TAG: $tag -----"
             eval ProtocolConvertObject::convert $args
 			puts $objName 
 			puts $newargs  			
-            eval $blocknamename config $newargs
-            eval $objName set_route -route_block $blocknamename
+            eval $blockname config $newargs
+            eval $objName set_route -route_block $blockname
 			     
         }
         
@@ -133,34 +146,64 @@ Deputs "----- TAG: $tag -----"
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
 			}
 			if { [info exists blockname ] } {
-                eval $objName advertise_route -route_block $blocknamename
+                eval $objName advertise_route -route_block $blockname
 			} else {
 			    eval $objName advertise_route
 			}
         }
         method WithdrawRouteBlock { args } {
-            set tag "body BgpRouter::WithdrawRouteBlock [info script]"
+            set tag "body IsisRouter::WithdrawRouteBlock [info script]"
 Deputs "----- TAG: $tag -----"
             foreach { key value } $args {
                 set key [string tolower $key]
 				switch -exact -- $key {
 					-blockname {
-					    set blocknamename [::IxiaCapi::NamespaceDefine $value]
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
 												
 					}
 				}
 			}
 			if { [info exists blockname ] } {
-               eval $objName withdraw_route -route_block $blocknamename
+               eval $objName withdraw_route -route_block $blockname
 			} else {
 			   eval $objName withdraw_route
 			}
+        }
+        
+        method DeleteRouteBlock { args } {
+            set tag "body IsisRouter::DeleteRouteBlock [info script]"
+Deputs "----- TAG: $tag -----"
+            foreach { key value } $args {
+                set key [string tolower $key]
+				switch -exact -- $key {
+					-blockname {
+					    set blockname [::IxiaCapi::NamespaceDefine $value]
+												
+					}
+				}
+			}
+			if { [info exists blockname ] } {
+                set index [ lsearch -exact $blockList $blockname ]
+                if {$index >= 0 } {
+                    $blockname unconfig
+                    catch { uplevel " delete object $blockname " }
+                    set blockList [ lreplace $blockList $index $index ]
+                }
+                
+            
+            } else {
+                foreach blockItem $blockList {
+                    $blockItem unconfig
+                    catch { uplevel " delete object $blockItem " }
+                } 
+                set blockList ""
+            }
         }
        
         method GetRouterStats {} {
@@ -173,7 +216,15 @@ Deputs "----- TAG: $tag -----"
 Deputs "----- TAG: $tag -----"
             eval $objName get_detailed_stats
         }
-        destructor {}
+        destructor {
+            set tag "body IsisRouter::dtor [info script]"
+Deputs "----- TAG: $tag -----"
+            if {$blockList != ""} {
+                foreach blockItem $blockList {
+                    catch { uplevel " delete object $blockItem " }
+                }
+            }
+        }
         
       
     }

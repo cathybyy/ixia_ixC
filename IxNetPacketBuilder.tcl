@@ -5,6 +5,9 @@
 
 # Change made
 # Version 1.1
+# Version 1.2
+#   1. modify igmpv1
+#   2. modify igmpv3 srcnum srcip
 
 namespace eval IxiaCapi {
     class PacketBuilder {
@@ -324,6 +327,8 @@ namespace eval IxiaCapi {
     }
     body PacketBuilder::CreateICMPPkt { args } {
         global IxiaCapi::fail IxiaCapi::success
+        set tag "body PacketBuilder::CreateICMPPkt [info script]"
+Deputs "----- TAG: $tag -----"
         if { [ eval {CreateHeader -pro ICMP} $args ] == $success \
             && [ eval ConfigICMPPkt $args ] <= 1 } {
             return $IxiaCapi::errorcode(0) 
@@ -3376,10 +3381,12 @@ Deputs "version: $protocolver"
                         "$IxiaCapi::s_PacketBuilderConfigIGMPPkt16 $value" -tag $tag                        
                     }
                 }
+                -grouptype -
                 -recordtype -
                 -igmprecordtype {
                     set trans [ string toupper $value ]
                     set index [ lsearch -exact $ERecordType $trans ]
+                
                     if { $index < 0 } {
                         if { [ string is integer $value ] && $value < 7 && $value > 0 } {
                             set recordtype $trans
@@ -3388,7 +3395,8 @@ Deputs "version: $protocolver"
                             "$IxiaCapi::s_PacketBuilderConfigIGMPPkt17 $ERecordType" -tag $tag
                         }
                     } else {
-                        set recordtype [incr $index]
+                        set recordtype [incr index]
+                        Deputs "recodtype : $recordtype"
                     }
                 }
                 -auxiliarydatalen -
@@ -3422,6 +3430,31 @@ Deputs "version: $protocolver"
                         "$IxiaCapi::s_PacketBuilderConfigIGMPPkt20 $value" -tag $tag                        
                     }
                 }
+                -srcip2 {
+                    if { [ IxiaCapi::Regexer::IsIPv4Address $value ] } {
+                        lappend sa $value
+                    } else {
+                        IxiaCapi::Logger::LogIn -type warn -message \
+                        "$IxiaCapi::s_PacketBuilderConfigIGMPPkt20 $value" -tag $tag                        
+                    }
+                }
+                -srcip3 {
+                    if { [ IxiaCapi::Regexer::IsIPv4Address $value ] } {
+                        lappend sa $value
+                    } else {
+                        IxiaCapi::Logger::LogIn -type warn -message \
+                        "$IxiaCapi::s_PacketBuilderConfigIGMPPkt20 $value" -tag $tag                        
+                    }
+                }
+                -srcip4 {
+                    if { [ IxiaCapi::Regexer::IsIPv4Address $value ] } {
+                        lappend sa $value
+                    } else {
+                        IxiaCapi::Logger::LogIn -type warn -message \
+                        "$IxiaCapi::s_PacketBuilderConfigIGMPPkt20 $value" -tag $tag                        
+                    }
+                }
+               
             }
         }
 Deputs Step10
@@ -3492,12 +3525,14 @@ Deputs Step20
                         }
                     }
                 } else {
+				    switch $proType {
                         membershipreport {
-                            set typeVal 18
+                            set typeVal 2
                         }
                         membershipquery {
-                            set typeVal 17
+                            set typeVal 1
                         }
+					}
                 }
                 uplevel $level "
                     $pdu AddField type
@@ -3516,28 +3551,35 @@ Deputs Step30
             if { [ info exists gamode ] } {
                 switch -exact $gamode {
                     Fixed {
-					  #$pdu AddField groupAddress 
-					  if { $protocolver == "igmpv2" } {
-					     uplevel $level "
-                        $pdu AddFieldMode $gamode
-						$pdu AddField groupAddress
-                        $pdu AddFieldConfig $ga"
-					  } else {
-					      uplevel $level "
+					  #$pdu AddField groupAddress 					  					  
+					  if { $protocolver == "igmpv3" && $proType == "membershipreport"  } {
+					    uplevel $level "
                         $pdu AddFieldMode $gamode
 						$pdu AddField multicastAddress
                         $pdu AddFieldConfig $ga"
-					  }
-           
+					  } else  {
+					    uplevel $level "
+                        $pdu AddFieldMode $gamode
+						$pdu AddField groupAddress
+                        $pdu AddFieldConfig $ga"
+					  }					  					  					  
+					           
                     }
                     Decrementing -
                     Incrementing {
                         if { [ info exists gacount ] && [ info exists gastep ] } {
-            uplevel $level "
-                            $pdu AddFieldMode $gamode
-                            $pdu AddField multicastAddress 
-                            $pdu AddFieldConfig [ list $offset $ga $gacount $gastep ]
-                            "
+                            							
+							if { $protocolver == "igmpv3" && $proType == "membershipreport"  } {
+								uplevel $level "
+								$pdu AddFieldMode $gamode
+								$pdu AddField multicastAddress
+								$pdu AddFieldConfig [ list $offset $ga $gacount $gastep ]"
+							  } else  {
+								uplevel $level "
+								$pdu AddFieldMode $gamode
+								$pdu AddField groupAddress
+								$pdu AddFieldConfig [ list $offset $ga $gacount $gastep ]"
+							  }		
                         } else {
                             IxiaCapi::Logger::LogIn -type err -message \
                             "$IxiaCapi::s_common2 igmpgacount and igmpgastep"\
@@ -3599,10 +3641,18 @@ Deputs Step30
         #--------------------------
         #-----Config Source Address-----
         if { [ info exists sa ] } {
-            uplevel $level "
+            if {[llength $sa] == 1} {
+                uplevel $level "
                 $pdu AddField multicastSources.multicastSource  
                 $pdu AddFieldMode Fixed
                 $pdu AddFieldConfig $sa"
+            } else {
+                uplevel $level "
+                $pdu AddField multicastSources.multicastSource  
+                $pdu AddFieldMode MultiField
+                $pdu AddFieldConfig $sa"
+            }
+          
         }
         #--------------------------
         #-----Config GroupReportNum-----
@@ -4624,6 +4674,7 @@ Deputs "----- TAG: $tag -----"
 # param collection        
         foreach { key value } $args {
             set key [string tolower $key]
+            Deputs "$key, $value"
             switch -exact -- $key {
                 -name -
                 -pduname {
@@ -4636,10 +4687,12 @@ Deputs "----- TAG: $tag -----"
 Deputs "name:$name"
                     }
                 }
+                -customheader -
                 -hexstring {
                     if { [ regexp -nocase {(0x)?([a-f0-9]+)} $value match x hex ] == 0 } {
                         unset hex                    
 					} 
+                    Deputs "hex: $hex"
                 }
             }
         }
