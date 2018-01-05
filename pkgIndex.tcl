@@ -20,5 +20,5 @@ if {$::tcl_platform(platform) != "unix"} {
         return
     }
 } 
-package ifneeded IxiaCAPI 3.9.0 [list source [file join $dir IxiaCapi.tcl]]
+package ifneeded IxiaCAPI 3.9.1 [list source [file join $dir IxiaCapi.tcl]]
 

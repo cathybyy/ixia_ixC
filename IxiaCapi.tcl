@@ -153,6 +153,6 @@ namespace import ::IxiaCapi::Regexer::*
 namespace import ::IxiaCapi::Logger::*
 namespace import ::IxiaCapi::Lib::*
 
-set ixCapiVersion 3.9.0
+set ixCapiVersion 3.9.1
 package provide IxiaCAPI $ixCapiVersion
 namespace import IxiaCapi::*
