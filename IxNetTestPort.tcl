@@ -993,6 +993,29 @@ Deputs "----- TAG: $tag -----"
 			}
 		}
 		
+		# set traObj [ IxiaCapi::Regexer::GetObject $Traffic ]
+			# #Deputs "traObj::$traObj"
+        # set streamTotalList [ $traObj GetStreamList ]
+		# set streamTotalNum [llength  $streamTotalList ]
+		# Deputs "streamTotalNum:$streamTotalNum"
+		# if {$streamTotalNum > 16} {
+		    # set totalListHandle ""
+		    # foreach stream $streamTotalList {
+				# set streamObj [ IxiaCapi::Regexer::GetObject $stream ]
+				
+				# #ixNet setA $strObj -suspend False
+				
+				# set trafficObj [ uplevel 1 " $streamObj cget -hTrafficItem " ]
+				# #Deputs "strObj::$strObj"
+				# #Deputs "trafficObj::$trafficObj"
+				# lappend totalListHandle $trafficObj
+                # #lappend generateList $trafficObj
+				
+			# }
+		    
+		# }
+			
+		
 		
 		
 		set flowList "" 
@@ -1130,7 +1153,22 @@ Deputs "----- TAG: $tag -----"
             foreach trafficObj  $totalList rgname $nameList  {
                   ixNet setA $trafficObj -name  $rgname
                   ixNet commit
-            }         
+            } 
+            
+			#modify for 16 Stream Limit
+            set streamTotalNum [llength  $totalList ]	
+            if {$streamTotalNum > 16 } {
+			    foreach   trafficObj  $totalList {
+					ixNet setA $trafficObj -enabled false
+                    ixNet commit					
+				}
+				
+				foreach   trafficObj  $flowList {
+					ixNet setA $trafficObj -enabled true
+                    ixNet commit					
+				}
+			   
+            }			
             
             ixNet exec apply ::ixNet::OBJ-/traffic                    
             after 1000    

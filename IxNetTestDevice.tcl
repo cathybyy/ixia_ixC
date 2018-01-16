@@ -113,21 +113,13 @@ Deputs "delete:$obj"
                 }
             }
         }
-         
-        set traItemList [ixNet getL ::ixNet::OBJ-/traffic trafficItem ]
-        if { $traItemList != "" } {
-            foreach traItem $traItemList {
-                ixNet remove $traItem
-                ixNet commit
-            }
-        }
         
         foreach portObj $PortList {           
 Deputs "port obj:$portObj reset"
             $portObj Reset
         }
 		#IxiaCapi::PortManager Reset
-       
+        IxiaCapi::TrafficManager Reset
         
 		set macPool ""
 Deputs "mac pool clear:$macPool"		
@@ -1028,6 +1020,12 @@ Deputs "Traffic: $tra"
 							"$IxiaCapi::s_TestDeviceStartTraffic5 $port"
 						}
 					}
+					#modify for 16 Stream limit
+					foreach   trafficObj  $flowList {
+						ixNet setA $trafficObj -enabled true
+						ixNet commit					
+					}
+					after 1000
                     ixNet exec apply $root/traffic	
 			        after 2000
 					
@@ -1180,7 +1178,13 @@ Deputs "Traffic: $tra"
                           ixNet commit
                     }      
                 }
-                
+				
+				#modify for 16 Stream LIMIT
+                foreach   trafficObj  $flowList {
+					ixNet setA $trafficObj -enabled true
+					ixNet commit					
+				}
+				after 1000
                 
                 ixNet exec apply $root/traffic	
 			    after 2000

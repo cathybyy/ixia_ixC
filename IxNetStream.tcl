@@ -1327,6 +1327,7 @@ Deputs "Pro: $protocol "
                     if {[llength $nameList] == 1} {
                        set cutcrcflag 1
                        set trackingflag 0
+					   
                     }
 					
                 }
@@ -1472,6 +1473,10 @@ Deputs "protocol stack: $proStack"
 						if { [ regexp -nocase {^0x} $raw ] } {
                             set raw [string range $raw 2 end]                        
 						} 
+				Deputs "qqqqqqqqqqqqqqq [string length $raw] ,[ixNet setA $hStream/frameSize -fixedSize] "
+						if {[string length $raw] < [ixNet setA $hStream/frameSize -fixedSize]} {
+						    set cutcrcflag 0
+					    }
 						set ethstack  [ lindex [ ixNet getList $hStream stack ] 0 ]
 						set ethfieldList [ ixNet getList $ethstack field ]
 						set dstethvalue [string range $raw 0 11]
